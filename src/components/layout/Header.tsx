@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { signOut } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -12,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
-import { Menu, Bell, LogOut, User, Settings } from 'lucide-react';
+import { Menu, Bell, LogOut, User, Settings, CheckCircle, AlertCircle, Clock } from 'lucide-react';
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -27,9 +28,47 @@ interface HeaderProps {
 }
 
 export default function Header({ onMenuClick, user }: HeaderProps) {
+  const [showNotifications, setShowNotifications] = useState(false);
+
   const handleSignOut = () => {
     signOut({ callbackUrl: '/login' });
   };
+
+  // TODO: Replace with actual API call
+  const notifications = [
+    {
+      id: '1',
+      type: 'application_approved',
+      title: 'Application Approved',
+      message: 'Your education loan application LA202412001 has been approved',
+      timestamp: '2 hours ago',
+      read: false,
+      icon: CheckCircle,
+      iconColor: 'text-green-600'
+    },
+    {
+      id: '2',
+      type: 'document_required',
+      title: 'Documents Required',
+      message: 'Please upload additional documents for application LA202412002',
+      timestamp: '4 hours ago',
+      read: false,
+      icon: AlertCircle,
+      iconColor: 'text-orange-600'
+    },
+    {
+      id: '3',
+      type: 'application_assigned',
+      title: 'DSA Assigned',
+      message: 'Your application has been assigned to Jane Smith (SBI)',
+      timestamp: '1 day ago',
+      read: true,
+      icon: Clock,
+      iconColor: 'text-blue-600'
+    }
+  ];
+
+  const unreadCount = notifications.filter(n => !n.read).length;
 
   const getRoleBadgeVariant = (role: string) => {
     switch (role) {
@@ -44,10 +83,18 @@ export default function Header({ onMenuClick, user }: HeaderProps) {
     }
   };
 
-
-
   const getInitials = (firstName: string, lastName: string) => {
     return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
+  };
+
+  const markAsRead = (notificationId: string) => {
+    // TODO: Implement API call to mark notification as read
+    console.log('Mark notification as read:', notificationId);
+  };
+
+  const markAllAsRead = () => {
+    // TODO: Implement API call to mark all notifications as read
+    console.log('Mark all notifications as read');
   };
 
   return (
@@ -98,13 +145,74 @@ export default function Header({ onMenuClick, user }: HeaderProps) {
             </div>
 
             {/* Notifications */}
-            <Button variant="ghost" size="sm" className="relative hover:bg-slate-100 p-2">
-              <Bell className="h-5 w-5 text-slate-600" />
-              {/* Notification badge */}
-              <span className="absolute -top-1 -right-1 h-5 w-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-medium">
-                3
-              </span>
-            </Button>
+            <DropdownMenu open={showNotifications} onOpenChange={setShowNotifications}>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="relative hover:bg-slate-100 p-2">
+                  <Bell className="h-5 w-5 text-slate-600" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 h-5 w-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-medium">
+                      {unreadCount}
+                    </span>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-80 max-h-96 overflow-y-auto">
+                <div className="flex items-center justify-between p-3 border-b">
+                  <h3 className="font-semibold text-slate-900">Notifications</h3>
+                  {unreadCount > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={markAllAsRead}
+                      className="text-xs text-blue-600 hover:text-blue-700"
+                    >
+                      Mark all as read
+                    </Button>
+                  )}
+                </div>
+                {notifications.length === 0 ? (
+                  <div className="p-4 text-center text-slate-500">
+                    <Bell className="h-8 w-8 mx-auto mb-2 text-slate-300" />
+                    <p>No notifications</p>
+                  </div>
+                ) : (
+                  <div className="max-h-80 overflow-y-auto">
+                    {notifications.map((notification) => {
+                      const IconComponent = notification.icon;
+                      return (
+                        <DropdownMenuItem
+                          key={notification.id}
+                          className="p-3 cursor-pointer hover:bg-slate-50 focus:bg-slate-50"
+                          onClick={() => markAsRead(notification.id)}
+                        >
+                          <div className="flex items-start gap-3 w-full">
+                            <div className={`p-1 rounded-full ${notification.iconColor}`}>
+                              <IconComponent className="h-4 w-4" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between mb-1">
+                                <p className="font-medium text-slate-900 text-sm truncate">
+                                  {notification.title}
+                                </p>
+                                {!notification.read && (
+                                  <div className="h-2 w-2 bg-blue-600 rounded-full flex-shrink-0 ml-2"></div>
+                                )}
+                              </div>
+                              <p className="text-sm text-slate-600 line-clamp-2 mb-1">
+                                {notification.message}
+                              </p>
+                              <p className="text-xs text-slate-400">
+                                {notification.timestamp}
+                              </p>
+                            </div>
+                          </div>
+                        </DropdownMenuItem>
+                      );
+                    })}
+                  </div>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
 
             {/* User menu */}
             <DropdownMenu>
