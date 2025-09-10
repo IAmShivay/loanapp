@@ -277,7 +277,7 @@ export default async function Home() {
                       <Star key={i} className="h-5 w-5 text-yellow-400 fill-current" />
                     ))}
                   </div>
-                  <p className="text-slate-600 mb-4 italic">"{testimonial.text}"</p>
+                  <p className="text-slate-600 mb-4 italic">&ldquo;{testimonial.text}&rdquo;</p>
                   <div>
                     <div className="font-semibold text-slate-900">{testimonial.name}</div>
                     <div className="text-sm text-slate-500">{testimonial.course}</div>

@@ -156,24 +156,24 @@ export default function Header({ onMenuClick, user }: HeaderProps) {
                   )}
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-80 max-h-96 overflow-y-auto">
-                <div className="flex items-center justify-between p-3 border-b">
+              <DropdownMenuContent align="end" className="w-80 max-h-[32rem] overflow-hidden">
+                <div className="flex items-center justify-between p-3 border-b border-slate-100">
                   <h3 className="font-semibold text-slate-900">Notifications</h3>
                   {unreadCount > 0 && (
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={markAllAsRead}
-                      className="text-xs text-blue-600 hover:text-blue-700"
+                      className="text-xs text-blue-600 hover:text-blue-700 h-6 px-2"
                     >
                       Mark all as read
                     </Button>
                   )}
                 </div>
                 {notifications.length === 0 ? (
-                  <div className="p-4 text-center text-slate-500">
+                  <div className="p-6 text-center text-slate-500">
                     <Bell className="h-8 w-8 mx-auto mb-2 text-slate-300" />
-                    <p>No notifications</p>
+                    <p className="text-sm">No notifications</p>
                   </div>
                 ) : (
                   <div className="max-h-80 overflow-y-auto">
@@ -182,23 +182,23 @@ export default function Header({ onMenuClick, user }: HeaderProps) {
                       return (
                         <DropdownMenuItem
                           key={notification.id}
-                          className="p-3 cursor-pointer hover:bg-slate-50 focus:bg-slate-50"
+                          className="p-0 cursor-pointer focus:bg-slate-50"
                           onClick={() => markAsRead(notification.id)}
                         >
-                          <div className="flex items-start gap-3 w-full">
-                            <div className={`p-1 rounded-full ${notification.iconColor}`}>
-                              <IconComponent className="h-4 w-4" />
+                          <div className="flex items-start gap-3 w-full p-3 hover:bg-slate-50">
+                            <div className={`p-1.5 rounded-full bg-opacity-20 ${notification.iconColor.replace('text-', 'bg-')}`}>
+                              <IconComponent className={`h-3.5 w-3.5 ${notification.iconColor}`} />
                             </div>
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between mb-1">
-                                <p className="font-medium text-slate-900 text-sm truncate">
+                              <div className="flex items-start justify-between mb-1">
+                                <p className="font-medium text-slate-900 text-sm leading-tight pr-2">
                                   {notification.title}
                                 </p>
                                 {!notification.read && (
-                                  <div className="h-2 w-2 bg-blue-600 rounded-full flex-shrink-0 ml-2"></div>
+                                  <div className="h-2 w-2 bg-blue-600 rounded-full flex-shrink-0 mt-1"></div>
                                 )}
                               </div>
-                              <p className="text-sm text-slate-600 line-clamp-2 mb-1">
+                              <p className="text-sm text-slate-600 leading-relaxed mb-2 break-words">
                                 {notification.message}
                               </p>
                               <p className="text-xs text-slate-400">
@@ -219,7 +219,7 @@ export default function Header({ onMenuClick, user }: HeaderProps) {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-10 w-10 rounded-full hover:bg-slate-100 transition-colors">
                   <Avatar className="h-8 w-8 ring-2 ring-slate-200">
-                    <AvatarImage src={user.profilePicture} alt={user.name} />
+                    <AvatarImage src={user.profilePicture || undefined} alt={user.name} />
                     <AvatarFallback className="bg-blue-600 text-white font-semibold text-sm">
                       {getInitials(user.firstName, user.lastName)}
                     </AvatarFallback>
@@ -230,7 +230,7 @@ export default function Header({ onMenuClick, user }: HeaderProps) {
                 <DropdownMenuLabel className="font-normal p-4 border-b border-slate-100">
                   <div className="flex items-center space-x-3">
                     <Avatar className="h-10 w-10">
-                      <AvatarImage src={user.profilePicture} alt={user.name} />
+                      <AvatarImage src={user.profilePicture || undefined} alt={user.name} />
                       <AvatarFallback className="bg-blue-600 text-white font-semibold">
                         {getInitials(user.firstName, user.lastName)}
                       </AvatarFallback>

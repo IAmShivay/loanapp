@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/auth/utils';
-import { connectDB } from '@/lib/db/connection';
-import { LoanApplication } from '@/lib/db/models/LoanApplication';
+import connectDB from '@/lib/db/connection';
+import LoanApplication from '@/lib/db/models/LoanApplication';
 import { z } from 'zod';
 
 // Validation schema for creating new application
@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '10');
     const skip = (page - 1) * limit;
 
-    let query: any = {};
+    const query: Record<string, unknown> = {};
 
     // Filter based on user role
     if (session.user.role === 'user') {
@@ -211,7 +211,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Validation failed', details: error.errors },
+        { error: 'Validation failed', details: error.issues },
         { status: 400 }
       );
     }

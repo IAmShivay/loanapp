@@ -174,7 +174,7 @@ export default async function DSAChatPage() {
                   <div className="flex items-center gap-3">
                     <div className="relative">
                       <Avatar className="h-10 w-10">
-                        <AvatarImage src={conversation.avatar} />
+                        <AvatarImage src={conversation.avatar || undefined} />
                         <AvatarFallback className="bg-blue-600 text-white text-sm">
                           {getInitials(conversation.applicantName)}
                         </AvatarFallback>
@@ -213,7 +213,7 @@ export default async function DSAChatPage() {
               <div className="flex items-center gap-3">
                 <div className="relative">
                   <Avatar className="h-10 w-10">
-                    <AvatarImage src={currentChat.avatar} />
+                    <AvatarImage src={currentChat.avatar || undefined} />
                     <AvatarFallback className="bg-blue-600 text-white">
                       {getInitials(currentChat.applicantName)}
                     </AvatarFallback>

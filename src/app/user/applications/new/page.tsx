@@ -85,7 +85,7 @@ export default function NewApplicationPage() {
     'Review & Submit'
   ];
 
-  const handleInputChange = (field: keyof FormData, value: any) => {
+  const handleInputChange = (field: keyof FormData, value: unknown) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     // Clear error when user starts typing
     if (errors[field]) {
@@ -177,7 +177,7 @@ export default function NewApplicationPage() {
     } catch (error) {
       if (error instanceof z.ZodError) {
         const fieldErrors: Record<string, string> = {};
-        error.errors.forEach(err => {
+        error.issues.forEach(err => {
           if (err.path[0]) {
             fieldErrors[err.path[0] as string] = err.message;
           }
@@ -607,7 +607,7 @@ export default function NewApplicationPage() {
                     <li>Your application will be reviewed within 3-5 business days</li>
                     <li>You will be assigned a DSA who will guide you through the process</li>
                     <li>Additional documents may be requested during review</li>
-                    <li>Loan approval is subject to bank's terms and conditions</li>
+                    <li>Loan approval is subject to bank&apos;s terms and conditions</li>
                   </ul>
                 </div>
               </div>

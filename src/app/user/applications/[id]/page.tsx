@@ -193,7 +193,7 @@ export default async function ApplicationDetailPage({ params }: ApplicationDetai
         {/* Header */}
         <div className="flex items-center gap-4">
           <Link href="/user/applications">
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" >
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to Applications
             </Button>
@@ -204,7 +204,7 @@ export default async function ApplicationDetailPage({ params }: ApplicationDetai
               <Badge className={getStatusColor(application.status)}>
                 {application.status.replace('_', ' ')}
               </Badge>
-              <Badge className={getPriorityColor(application.priority)} size="sm">
+              <Badge className={getPriorityColor(application.priority)} >
                 {application.priority} priority
               </Badge>
             </div>
@@ -214,7 +214,7 @@ export default async function ApplicationDetailPage({ params }: ApplicationDetai
             </p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm">
+            <Button variant="outline" >
               <Download className="h-4 w-4 mr-2" />
               Download PDF
             </Button>
@@ -257,11 +257,11 @@ export default async function ApplicationDetailPage({ params }: ApplicationDetai
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Badge className={getDocumentStatusColor(doc.status)} size="sm">
+                      <Badge className={getDocumentStatusColor(doc.status)} >
                         {doc.status}
                       </Badge>
                       {doc.status === 'pending' && (
-                        <Button size="sm" variant="outline">
+                        <Button  variant="outline">
                           <Upload className="h-3 w-3 mr-1" />
                           Upload
                         </Button>

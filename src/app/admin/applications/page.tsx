@@ -242,7 +242,7 @@ export default async function AdminApplicationsPage() {
                         <div>
                           <div className="font-semibold text-slate-900">{app.id}</div>
                           <div className="text-sm text-slate-500">{app.submittedAt}</div>
-                          <Badge className={getPriorityColor(app.priority)} size="sm">
+                          <Badge className={getPriorityColor(app.priority)}>
                             {app.priority}
                           </Badge>
                         </div>

@@ -255,11 +255,11 @@ export default async function DSAApplicationsPage() {
                         <div>
                           <div className="flex items-center gap-2">
                             <h3 className="font-semibold text-slate-900">{app.id}</h3>
-                            <Badge className={getPriorityColor(app.priority)} size="sm">
+                            <Badge className={getPriorityColor(app.priority)} >
                               {app.priority}
                             </Badge>
                             {isUrgent && (
-                              <Badge className="bg-red-100 text-red-800" size="sm">
+                              <Badge className="bg-red-100 text-red-800" >
                                 Urgent
                               </Badge>
                             )}
@@ -314,13 +314,13 @@ export default async function DSAApplicationsPage() {
 
                     <div className="flex flex-col sm:flex-row gap-2">
                       <Link href={`/dsa/applications/${app.id}`}>
-                        <Button variant="outline" size="sm" className="w-full sm:w-auto">
+                        <Button variant="outline"  className="w-full sm:w-auto">
                           <Eye className="h-4 w-4 mr-2" />
                           Review
                         </Button>
                       </Link>
                       {app.status === 'pending_review' && (
-                        <Button size="sm" className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700">
+                        <Button  className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700">
                           <Edit className="h-4 w-4 mr-2" />
                           Process
                         </Button>
