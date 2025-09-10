@@ -70,23 +70,25 @@ export default async function UserDashboard() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <div className="space-y-6 lg:space-y-8">
         {/* Welcome Section */}
-        <div className="flex justify-between items-start">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Welcome back, {session.user.firstName}!</h1>
-            <p className="text-gray-600 mt-2">Manage your loan applications and track their progress.</p>
+        <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-background rounded-xl lg:rounded-2xl shadow-sm border border-primary/10 p-4 sm:p-6 lg:p-8">
+          <div className="flex justify-between items-start">
+            <div className="space-y-3">
+              <h1 className="text-3xl font-bold text-foreground">Welcome back, {session.user.firstName}!</h1>
+              <p className="text-muted-foreground text-lg">Manage your loan applications and track their progress.</p>
+            </div>
+            <Link href="/user/applications/new">
+              <Button className="bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105">
+                <Plus className="h-4 w-4 mr-2" />
+                New Application
+              </Button>
+            </Link>
           </div>
-          <Link href="/user/applications/new">
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              New Application
-            </Button>
-          </Link>
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
           <StatCard
             title="Total Applications"
             value={stats.totalApplications}

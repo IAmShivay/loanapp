@@ -56,23 +56,37 @@ export default async function DSADashboard() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <div className="space-y-6 lg:space-y-8">
         {/* Welcome Section */}
-        <div className="flex justify-between items-start">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Welcome back, {session.user.firstName}!</h1>
-            <p className="text-gray-600 mt-2">
-              DSA ID: {session.user.dsaId} | {session.user.bankName} Bank
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="text-sm text-gray-600">Success Rate</p>
-            <p className="text-2xl font-bold text-green-600">{stats.successRate}%</p>
+        <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-background rounded-xl lg:rounded-2xl shadow-sm border border-primary/10 p-4 sm:p-6 lg:p-8">
+          <div className="flex justify-between items-start">
+            <div className="space-y-3">
+              <h1 className="text-3xl font-bold text-foreground">Welcome back, {session.user.firstName}!</h1>
+              <div className="flex items-center space-x-4">
+                <div className="bg-primary/10 px-4 py-2 rounded-full">
+                  <p className="text-sm font-semibold text-primary">
+                    DSA ID: {session.user.dsaId}
+                  </p>
+                </div>
+                <div className="bg-blue-50 px-4 py-2 rounded-full">
+                  <p className="text-sm font-semibold text-blue-600">
+                    {session.user.bankName} Bank
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="text-right space-y-2">
+              <p className="text-sm text-muted-foreground font-medium">Success Rate</p>
+              <div className="flex items-center space-x-2">
+                <div className="text-3xl font-bold text-green-600">{stats.successRate}%</div>
+                <div className="w-3 h-3 bg-gradient-to-r from-green-400 to-green-500 rounded-full animate-pulse"></div>
+              </div>
+            </div>
           </div>
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
           <StatCard
             title="Assigned Applications"
             value={stats.assignedApplications}

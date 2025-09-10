@@ -57,28 +57,37 @@ export default function StatCard({
   const Icon = icon ? iconMap[icon] : null;
 
   return (
-    <Card className={cn("", className)}>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">
+    <Card className={cn(
+      "bg-white border border-slate-200 hover:shadow-md transition-all duration-200 hover:border-slate-300",
+      className
+    )}>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4 sm:p-6">
+        <CardTitle className="text-xs sm:text-sm font-medium text-slate-600 uppercase tracking-wide">
           {title}
         </CardTitle>
         {Icon && (
-          <Icon className="h-4 w-4 text-muted-foreground" />
+          <div className="p-1.5 sm:p-2 bg-blue-50 rounded-lg">
+            <Icon className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
+          </div>
         )}
       </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold">{value}</div>
+      <CardContent className="space-y-2 sm:space-y-3 p-4 sm:p-6 pt-0">
+        <div className="text-xl sm:text-2xl font-bold text-slate-900">{value}</div>
         {(description || trend) && (
-          <div className="flex items-center space-x-2 text-xs text-muted-foreground mt-1">
+          <div className="flex items-center justify-between text-xs sm:text-sm">
+            {description && (
+              <span className="text-slate-500 truncate">{description}</span>
+            )}
             {trend && (
               <span className={cn(
-                "flex items-center",
-                trend.isPositive ? "text-green-600" : "text-red-600"
+                "flex items-center font-medium px-2 py-1 rounded-full text-xs flex-shrink-0 ml-2",
+                trend.isPositive
+                  ? "text-green-700 bg-green-50"
+                  : "text-red-700 bg-red-50"
               )}>
-                {trend.isPositive ? "+" : ""}{trend.value}%
+                {trend.isPositive ? "↗" : "↘"} {trend.isPositive ? "+" : ""}{trend.value}%
               </span>
             )}
-            {description && <span>{description}</span>}
           </div>
         )}
       </CardContent>
