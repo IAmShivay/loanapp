@@ -13,7 +13,10 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Menu, Bell, LogOut, User, Settings, CheckCircle, AlertCircle, Clock } from 'lucide-react';
+import { useGetNotificationsQuery, useMarkNotificationAsReadMutation } from '@/store/api/apiSlice';
+import { safeNotification, safeTimeAgo } from '@/lib/utils/fallbacks';
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -30,45 +33,39 @@ interface HeaderProps {
 export default function Header({ onMenuClick, user }: HeaderProps) {
   const [showNotifications, setShowNotifications] = useState(false);
 
+  // RTK Query hooks
+  const {
+    data: notificationsData,
+    isLoading: notificationsLoading,
+    error: notificationsError
+  } = useGetNotificationsQuery();
+
+  const [markAsRead] = useMarkNotificationAsReadMutation();
+
   const handleSignOut = () => {
     signOut({ callbackUrl: '/login' });
   };
 
-  // TODO: Replace with actual API call
-  const notifications = [
-    {
-      id: '1',
-      type: 'application_approved',
-      title: 'Application Approved',
-      message: 'Your education loan application LA202412001 has been approved',
-      timestamp: '2 hours ago',
-      read: false,
-      icon: CheckCircle,
-      iconColor: 'text-green-600'
-    },
-    {
-      id: '2',
-      type: 'document_required',
-      title: 'Documents Required',
-      message: 'Please upload additional documents for application LA202412002',
-      timestamp: '4 hours ago',
-      read: false,
-      icon: AlertCircle,
-      iconColor: 'text-orange-600'
-    },
-    {
-      id: '3',
-      type: 'application_assigned',
-      title: 'DSA Assigned',
-      message: 'Your application has been assigned to Jane Smith (SBI)',
-      timestamp: '1 day ago',
-      read: true,
-      icon: Clock,
-      iconColor: 'text-blue-600'
+  const handleMarkAsRead = async (notificationId: string) => {
+    try {
+      await markAsRead(notificationId).unwrap();
+    } catch (error) {
+      console.error('Failed to mark notification as read:', error);
     }
-  ];
+  };
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  // Safe notifications with fallbacks
+  const notifications = notificationsData?.notifications?.map(safeNotification) || [];
+  const unreadCount = notificationsData?.unreadCount || 0;
+
+  const getNotificationIcon = (type: string) => {
+    switch (type) {
+      case 'success': return { icon: CheckCircle, color: 'text-green-600' };
+      case 'warning': return { icon: AlertCircle, color: 'text-orange-600' };
+      case 'error': return { icon: AlertCircle, color: 'text-red-600' };
+      default: return { icon: Clock, color: 'text-blue-600' };
+    }
+  };
 
   const getRoleBadgeVariant = (role: string) => {
     switch (role) {
@@ -87,14 +84,18 @@ export default function Header({ onMenuClick, user }: HeaderProps) {
     return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
   };
 
-  const markAsRead = (notificationId: string) => {
-    // TODO: Implement API call to mark notification as read
-    console.log('Mark notification as read:', notificationId);
-  };
-
-  const markAllAsRead = () => {
-    // TODO: Implement API call to mark all notifications as read
-    console.log('Mark all notifications as read');
+  const markAllAsRead = async () => {
+    try {
+      // Mark all notifications as read
+      const unreadNotifications = notifications.filter(n => !n.read);
+      await Promise.all(
+        unreadNotifications.map(notification =>
+          markAsRead(notification._id).unwrap()
+        )
+      );
+    } catch (error) {
+      console.error('Failed to mark all notifications as read:', error);
+    }
   };
 
   return (
@@ -170,7 +171,20 @@ export default function Header({ onMenuClick, user }: HeaderProps) {
                     </Button>
                   )}
                 </div>
-                {notifications.length === 0 ? (
+                {notificationsLoading ? (
+                  <div className="p-3 space-y-3">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <div key={i} className="flex items-start gap-3">
+                        <Skeleton className="h-7 w-7 rounded-full" />
+                        <div className="flex-1 space-y-2">
+                          <Skeleton className="h-4 w-3/4" />
+                          <Skeleton className="h-3 w-full" />
+                          <Skeleton className="h-3 w-1/2" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : notifications.length === 0 ? (
                   <div className="p-6 text-center text-slate-500">
                     <Bell className="h-8 w-8 mx-auto mb-2 text-slate-300" />
                     <p className="text-sm">No notifications</p>
@@ -178,16 +192,16 @@ export default function Header({ onMenuClick, user }: HeaderProps) {
                 ) : (
                   <div className="max-h-80 overflow-y-auto">
                     {notifications.map((notification) => {
-                      const IconComponent = notification.icon;
+                      const { icon: IconComponent, color } = getNotificationIcon(notification.type);
                       return (
                         <DropdownMenuItem
-                          key={notification.id}
+                          key={notification._id}
                           className="p-0 cursor-pointer focus:bg-slate-50"
-                          onClick={() => markAsRead(notification.id)}
+                          onClick={() => !notification.read && handleMarkAsRead(notification._id)}
                         >
                           <div className="flex items-start gap-3 w-full p-3 hover:bg-slate-50">
-                            <div className={`p-1.5 rounded-full bg-opacity-20 ${notification.iconColor.replace('text-', 'bg-')}`}>
-                              <IconComponent className={`h-3.5 w-3.5 ${notification.iconColor}`} />
+                            <div className={`p-1.5 rounded-full bg-opacity-20 ${color.replace('text-', 'bg-')}`}>
+                              <IconComponent className={`h-3.5 w-3.5 ${color}`} />
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-start justify-between mb-1">
@@ -202,7 +216,7 @@ export default function Header({ onMenuClick, user }: HeaderProps) {
                                 {notification.message}
                               </p>
                               <p className="text-xs text-slate-400">
-                                {notification.timestamp}
+                                {safeTimeAgo(notification.createdAt)}
                               </p>
                             </div>
                           </div>

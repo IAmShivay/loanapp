@@ -1,177 +1,209 @@
-import { getAuthSession } from '@/lib/auth/utils';
-import { redirect } from 'next/navigation';
+'use client';
+
+import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/layout';
-import { StatCard } from '@/components/common';
+import StatCard from '@/components/common/StatCard';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { SkeletonStatsGrid, SkeletonTable, SkeletonList } from '@/components/ui/loading/SkeletonCard';
+import { useGetStatisticsQuery, useGetApplicationsQuery, useGetUsersQuery } from '@/store/api/apiSlice';
+import { formatIndianNumber, formatLoanAmount, formatPercentage } from '@/lib/utils/currency';
+import { safeStatistics, safeApplication, safeUser, safeDate } from '@/lib/utils/fallbacks';
 
-export default async function AdminDashboard() {
-  const session = await getAuthSession();
-  
-  if (!session?.user || session.user.role !== 'admin') {
-    redirect('/login');
+export default function AdminDashboard() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+
+  // RTK Query hooks
+  const { 
+    data: statsData, 
+    isLoading: statsLoading, 
+    error: statsError 
+  } = useGetStatisticsQuery('admin', {
+    skip: !session || session.user.role !== 'admin'
+  });
+
+  const { 
+    data: applicationsData, 
+    isLoading: applicationsLoading 
+  } = useGetApplicationsQuery({ 
+    limit: 5, 
+    status: 'pending' 
+  }, {
+    skip: !session || session.user.role !== 'admin'
+  });
+
+  const { 
+    data: usersData, 
+    isLoading: usersLoading 
+  } = useGetUsersQuery({ 
+    limit: 5 
+  }, {
+    skip: !session || session.user.role !== 'admin'
+  });
+
+  // Safe data with fallbacks
+  const stats = safeStatistics(statsData?.statistics);
+  const applications = applicationsData?.applications?.map(safeApplication) || [];
+  const users = usersData?.users?.map(safeUser) || [];
+
+  // Redirect if not admin
+  if (status === 'loading') return <div>Loading...</div>;
+  if (!session || session.user.role !== 'admin') {
+    router.push('/login');
+    return null;
   }
-
-  // Mock data - in real app, fetch from database
-  const stats = {
-    totalUsers: 1250,
-    totalApplications: 485,
-    pendingApplications: 23,
-    approvedApplications: 342,
-    rejectedApplications: 120,
-    activeDSAs: 15,
-    totalTickets: 67,
-    openTickets: 12,
-  };
 
   return (
     <DashboardLayout>
-      <div className="space-y-6 lg:space-y-8">
-        {/* Welcome Section */}
-        <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-background rounded-xl lg:rounded-2xl shadow-sm border border-primary/10 p-4 sm:p-6 lg:p-8">
-          <div className="flex items-center justify-between">
+      <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl p-6 text-white">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="space-y-2">
-              <h1 className="text-3xl font-bold text-foreground">
-                Welcome back, {session.user.firstName}!
+              <h1 className="text-3xl font-bold text-white">
+                Welcome back, {session?.user?.firstName || 'Admin'}!
               </h1>
-              <p className="text-muted-foreground text-lg">
+              <p className="text-blue-100 text-lg">
                 Here&apos;s what&apos;s happening with your loan management system today.
               </p>
-            </div>
-            <div className="text-right space-y-2">
-              <p className="text-sm text-muted-foreground font-medium">System Status</p>
-              <div className="flex items-center space-x-3">
-                <div className="w-3 h-3 bg-gradient-to-r from-green-400 to-green-500 rounded-full animate-pulse shadow-lg"></div>
-                <span className="text-sm font-semibold text-green-600 bg-green-50 px-3 py-1 rounded-full">
-                  All Systems Operational
-                </span>
-              </div>
             </div>
           </div>
         </div>
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
-          <StatCard
-            title="Total Users"
-            value={stats.totalUsers.toLocaleString()}
-            description="All registered users"
-            icon="Users"
-            trend={{ value: 12, isPositive: true }}
-          />
-          <StatCard
-            title="Total Applications"
-            value={stats.totalApplications.toLocaleString()}
-            description="Loan applications"
-            icon="FileText"
-            trend={{ value: 8, isPositive: true }}
-          />
-          <StatCard
-            title="Pending Applications"
-            value={stats.pendingApplications}
-            description="Awaiting review"
-            icon="Clock"
-          />
-          <StatCard
-            title="Active DSAs"
-            value={stats.activeDSAs}
-            description="Verified DSAs"
-            icon="TrendingUp"
-            trend={{ value: 2, isPositive: true }}
-          />
-        </div>
+        {/* Statistics Grid */}
+        {statsLoading ? (
+          <SkeletonStatsGrid count={8} />
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
+            <StatCard
+              title="Total Users"
+              value={formatIndianNumber(stats.totalUsers)}
+              description="Registered users"
+              icon="Users"
+            />
+            <StatCard
+              title="Total Applications"
+              value={formatIndianNumber(stats.totalApplications)}
+              description="All applications"
+              icon="FileText"
+            />
+            <StatCard
+              title="Pending Applications"
+              value={formatIndianNumber(stats.pendingApplications)}
+              description="Awaiting review"
+              icon="Clock"
+            />
+            <StatCard
+              title="Approved Applications"
+              value={formatIndianNumber(stats.approvedApplications)}
+              description="Successfully approved"
+              icon="CheckCircle"
+            />
+            <StatCard
+              title="Rejected Applications"
+              value={formatIndianNumber(stats.rejectedApplications)}
+              description="Applications rejected"
+              icon="XCircle"
+            />
+            <StatCard
+              title="Active DSAs"
+              value={formatIndianNumber(stats.activeDSAs)}
+              description="Working DSAs"
+              icon="Users"
+            />
+            <StatCard
+              title="Total Loan Amount"
+              value={formatLoanAmount(stats.totalLoanAmount)}
+              description="Total disbursed amount"
+              icon="DollarSign"
+            />
+            <StatCard
+              title="Average Loan Amount"
+              value={formatLoanAmount(stats.averageLoanAmount)}
+              description="Per application"
+              icon="Target"
+            />
+          </div>
+        )}
 
-        {/* Secondary Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <StatCard
-            title="Approved Applications"
-            value={stats.approvedApplications}
-            description="Successfully processed"
-            icon="CheckCircle"
-          />
-          <StatCard
-            title="Support Tickets"
-            value={stats.totalTickets}
-            description={`${stats.openTickets} open tickets`}
-            icon="HelpCircle"
-          />
-          <StatCard
-            title="Rejection Rate"
-            value={`${Math.round((stats.rejectedApplications / stats.totalApplications) * 100)}%`}
-            description="Of total applications"
-            icon="FileText"
-          />
-        </div>
-
-        {/* Recent Activity */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
-          <Card className="bg-white border border-slate-200 shadow-sm">
-            <CardHeader className="border-b border-slate-100">
-              <CardTitle className="text-lg font-semibold text-slate-900">Recent Applications</CardTitle>
-              <CardDescription className="text-slate-600">Latest loan applications submitted</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {[
-                  { id: 'LA202412001', user: 'John Doe', amount: '₹5,00,000', status: 'pending' },
-                  { id: 'LA202412002', user: 'Jane Smith', amount: '₹3,50,000', status: 'under_review' },
-                  { id: 'LA202412003', user: 'Mike Johnson', amount: '₹7,50,000', status: 'approved' },
-                  { id: 'LA202412004', user: 'Sarah Wilson', amount: '₹2,25,000', status: 'pending' },
-                ].map((app) => (
-                  <div key={app.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-100 hover:bg-slate-100 transition-colors">
-                    <div>
-                      <p className="font-semibold text-slate-900">{app.user}</p>
-                      <p className="text-sm text-slate-500">{app.id}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-semibold text-slate-900">{app.amount}</p>
-                      <span className={`text-xs px-3 py-1 rounded-full font-medium ${
-                        app.status === 'approved' ? 'bg-green-100 text-green-700' :
-                        app.status === 'under_review' ? 'bg-blue-100 text-blue-700' :
-                        'bg-yellow-100 text-yellow-700'
-                      }`}>
-                        {app.status.replace('_', ' ')}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>DSA Performance</CardTitle>
-              <CardDescription>Top performing DSAs this month</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {[
-                  { name: 'John Smith', bank: 'SBI', applications: 23, approved: 18 },
-                  { name: 'Mary Johnson', bank: 'HDFC', applications: 19, approved: 15 },
-                  { name: 'David Brown', bank: 'ICICI', applications: 17, approved: 12 },
-                  { name: 'Lisa Davis', bank: 'AXIS', applications: 15, approved: 11 },
-                ].map((dsa, index) => (
-                  <div key={dsa.name} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center text-sm font-medium">
-                        {index + 1}
+        {/* Recent Applications and Users */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Recent Applications */}
+          {applicationsLoading ? (
+            <SkeletonList items={5} />
+          ) : (
+            <Card className="bg-white border border-slate-200">
+              <CardHeader>
+                <CardTitle className="text-xl font-semibold text-gray-900">Recent Applications</CardTitle>
+                <CardDescription>Latest loan applications submitted</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {applications.length === 0 ? (
+                    <p className="text-gray-500 text-center py-4">No applications found</p>
+                  ) : (
+                    applications.map((app) => (
+                      <div key={app._id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50">
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between mb-2">
+                            <h3 className="font-medium">{app.personalInfo.firstName} {app.personalInfo.lastName}</h3>
+                            <Badge variant={app.status === 'approved' ? 'default' : app.status === 'rejected' ? 'destructive' : 'secondary'}>
+                              {app.status}
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-gray-600">{formatLoanAmount(app.loanInfo.amount)}</p>
+                          <p className="text-xs text-gray-500">{safeDate(app.createdAt)}</p>
+                        </div>
+                        <Button variant="outline" size="sm">
+                          View
+                        </Button>
                       </div>
-                      <div>
-                        <p className="font-medium">{dsa.name}</p>
-                        <p className="text-sm text-gray-600">{dsa.bank} Bank</p>
+                    ))
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Recent Users */}
+          {usersLoading ? (
+            <SkeletonList items={5} showAvatar />
+          ) : (
+            <Card className="bg-white border border-slate-200">
+              <CardHeader>
+                <CardTitle className="text-xl font-semibold text-gray-900">Recent Users</CardTitle>
+                <CardDescription>Newly registered users</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {users.length === 0 ? (
+                    <p className="text-gray-500 text-center py-4">No users found</p>
+                  ) : (
+                    users.map((user) => (
+                      <div key={user._id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50">
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between mb-2">
+                            <h3 className="font-medium">{user.firstName} {user.lastName}</h3>
+                            <Badge variant={user.isVerified ? 'default' : 'secondary'}>
+                              {user.isVerified ? 'Verified' : 'Pending'}
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-gray-600">{user.email}</p>
+                          <p className="text-xs text-gray-500">Role: {user.role}</p>
+                        </div>
+                        <Button variant="outline" size="sm">
+                          Manage
+                        </Button>
                       </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-medium">{dsa.approved}/{dsa.applications}</p>
-                      <p className="text-sm text-gray-600">
-                        {Math.round((dsa.approved / dsa.applications) * 100)}% success
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                    ))
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </DashboardLayout>

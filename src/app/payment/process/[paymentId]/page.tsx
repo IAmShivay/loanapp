@@ -3,19 +3,21 @@ import { redirect, notFound } from 'next/navigation';
 import { PaymentProcessor } from '@/components/payment/PaymentProcessor';
 
 interface PaymentProcessPageProps {
-  params: {
+  params: Promise<{
     paymentId: string;
-  };
+  }>;
 }
 
 export default async function PaymentProcessPage({ params }: PaymentProcessPageProps) {
   const session = await getAuthSession();
-  
+
   if (!session?.user || session.user.role !== 'user') {
     redirect('/login');
   }
 
-  if (!params.paymentId) {
+  const { paymentId } = await params;
+
+  if (!paymentId) {
     notFound();
   }
 
@@ -33,7 +35,7 @@ export default async function PaymentProcessPage({ params }: PaymentProcessPageP
             <p className="text-slate-600">Secure payment processing for your loan application</p>
           </div>
 
-          <PaymentProcessor paymentId={params.paymentId} />
+          <PaymentProcessor paymentId={paymentId} />
         </div>
 
         {/* Security Notice */}

@@ -1,5 +1,8 @@
-import { getAuthSession } from '@/lib/auth/utils';
-import { redirect } from 'next/navigation';
+'use client';
+
+import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import { DashboardLayout } from '@/components/layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,62 +12,59 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Search, Filter, FileText, MoreHorizontal, Eye, Edit, Download } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import Link from 'next/link';
+import {
+  useGetApplicationsQuery,
+  useUpdateApplicationStatusMutation,
+  useGetStatisticsQuery
+} from '@/store/api/apiSlice';
+import LoadingSpinner from '@/components/common/LoadingSpinner';
+import { safeString, safeNumber, safeDate, formatCurrency } from '@/lib/utils/fallbacks';
+import { toast } from 'sonner';
 
-export default async function AdminApplicationsPage() {
-  const session = await getAuthSession();
-  
-  if (!session?.user || session.user.role !== 'admin') {
-    redirect('/login');
+export default function AdminApplicationsPage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+
+  if (status === 'loading') {
+    return <LoadingSpinner />;
   }
 
-  // TODO: Replace with actual API call
-  const applications = [
-    {
-      id: 'LA202412001',
-      applicantName: 'John Doe',
-      applicantEmail: 'john@example.com',
-      loanType: 'Education Loan',
-      amount: 500000,
-      purpose: 'Masters in Computer Science',
-      institution: 'Stanford University',
-      status: 'under_review',
-      dsaName: 'Jane Smith',
-      dsaBank: 'SBI',
-      submittedAt: '2024-12-10',
-      reviewedAt: null,
-      priority: 'high'
-    },
-    {
-      id: 'LA202412002',
-      applicantName: 'Alice Johnson',
-      applicantEmail: 'alice@example.com',
-      loanType: 'Education Loan',
-      amount: 750000,
-      purpose: 'MBA Program',
-      institution: 'Harvard Business School',
-      status: 'approved',
-      dsaName: 'Mike Wilson',
-      dsaBank: 'HDFC',
-      submittedAt: '2024-12-08',
-      reviewedAt: '2024-12-09',
-      priority: 'medium'
-    },
-    {
-      id: 'LA202412003',
-      applicantName: 'Bob Smith',
-      applicantEmail: 'bob@example.com',
-      loanType: 'Education Loan',
-      amount: 300000,
-      purpose: 'Engineering Degree',
-      institution: 'IIT Delhi',
-      status: 'rejected',
-      dsaName: 'Sarah Davis',
-      dsaBank: 'ICICI',
-      submittedAt: '2024-12-07',
-      reviewedAt: '2024-12-08',
-      priority: 'low'
+  if (!session?.user || session.user.role !== 'admin') {
+    router.push('/login');
+    return null;
+  }
+
+  const [statusFilter, setStatusFilter] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // RTK Query hooks
+  const {
+    data: applicationsData,
+    isLoading: applicationsLoading,
+    error: applicationsError,
+    refetch: refetchApplications
+  } = useGetApplicationsQuery({
+    status: statusFilter || undefined,
+    search: searchTerm || undefined,
+    limit: 50,
+    page: 1
+  });
+
+  const { data: statisticsData } = useGetStatisticsQuery('admin');
+  const [updateApplicationStatus] = useUpdateApplicationStatusMutation();
+
+  const applications = applicationsData?.applications || [];
+
+  const handleStatusUpdate = async (applicationId: string, newStatus: string) => {
+    try {
+      await updateApplicationStatus({ applicationId, status: newStatus }).unwrap();
+      toast.success('Application status updated successfully');
+      refetchApplications();
+    } catch (error) {
+      toast.error('Failed to update application status');
+      console.error('Error updating application:', error);
     }
-  ];
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -93,6 +93,14 @@ export default async function AdminApplicationsPage() {
         return 'bg-gray-100 text-gray-800';
     }
   };
+
+  if (applicationsLoading) {
+    return (
+      <DashboardLayout>
+        <LoadingSpinner />
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -166,7 +174,7 @@ export default async function AdminApplicationsPage() {
                 <div>
                   <p className="text-sm font-medium text-slate-600">Total Amount</p>
                   <p className="text-2xl font-bold text-slate-900">
-                    ₹{(applications.reduce((sum, app) => sum + app.amount, 0) / 100000).toFixed(1)}L
+                    ₹{(applications.reduce((sum, app) => sum + safeNumber(app.loanInfo?.amount, 0), 0) / 100000).toFixed(1)}L
                   </p>
                 </div>
                 <div className="p-2 bg-purple-50 rounded-lg">
@@ -237,11 +245,11 @@ export default async function AdminApplicationsPage() {
                 </thead>
                 <tbody>
                   {applications.map((app) => (
-                    <tr key={app.id} className="border-b border-slate-100 hover:bg-slate-50">
+                    <tr key={app._id} className="border-b border-slate-100 hover:bg-slate-50">
                       <td className="p-4">
                         <div>
-                          <div className="font-semibold text-slate-900">{app.id}</div>
-                          <div className="text-sm text-slate-500">{app.submittedAt}</div>
+                          <div className="font-semibold text-slate-900">{safeString(app.applicationId)}</div>
+                          <div className="text-sm text-slate-500">{safeDate(app.createdAt)}</div>
                           <Badge className={getPriorityColor(app.priority)}>
                             {app.priority}
                           </Badge>
@@ -249,17 +257,19 @@ export default async function AdminApplicationsPage() {
                       </td>
                       <td className="p-4">
                         <div>
-                          <div className="font-medium text-slate-900">{app.applicantName}</div>
-                          <div className="text-sm text-slate-500">{app.applicantEmail}</div>
+                          <div className="font-medium text-slate-900">
+                            {safeString(app.personalInfo?.firstName)} {safeString(app.personalInfo?.lastName)}
+                          </div>
+                          <div className="text-sm text-slate-500">{safeString(app.personalInfo?.email)}</div>
                         </div>
                       </td>
                       <td className="p-4">
-                        <span className="font-semibold">₹{(app.amount / 100000).toFixed(1)}L</span>
+                        <span className="font-semibold">{formatCurrency(app.loanInfo?.amount)}</span>
                       </td>
                       <td className="p-4">
                         <div>
-                          <div className="font-medium text-slate-900">{app.institution}</div>
-                          <div className="text-sm text-slate-500">{app.purpose}</div>
+                          <div className="font-medium text-slate-900">{safeString(app.educationInfo?.instituteName)}</div>
+                          <div className="text-sm text-slate-500">{safeString(app.loanInfo?.purpose)}</div>
                         </div>
                       </td>
                       <td className="p-4">
@@ -269,8 +279,8 @@ export default async function AdminApplicationsPage() {
                       </td>
                       <td className="p-4">
                         <div>
-                          <div className="font-medium text-slate-900">{app.dsaName}</div>
-                          <div className="text-sm text-slate-500">{app.dsaBank}</div>
+                          <div className="font-medium text-slate-900">Auto-Assigned</div>
+                          <div className="text-sm text-slate-500">Multiple Banks</div>
                         </div>
                       </td>
                       <td className="p-4">

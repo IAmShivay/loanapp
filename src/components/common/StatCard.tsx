@@ -14,7 +14,9 @@ import {
   MessageSquare,
   Plus,
   Eye,
-  AlertTriangle
+  AlertTriangle,
+  DollarSign,
+  Target
 } from 'lucide-react';
 
 const iconMap = {
@@ -30,6 +32,8 @@ const iconMap = {
   Plus,
   Eye,
   AlertTriangle,
+  DollarSign,
+  Target,
 };
 
 type IconName = keyof typeof iconMap;

@@ -1,5 +1,8 @@
-import { getAuthSession } from '@/lib/auth/utils';
-import { redirect } from 'next/navigation';
+'use client';
+
+import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -22,343 +25,436 @@ import {
   FileText,
   CreditCard,
   GraduationCap,
-  Building
+  Building,
+  AlertCircle,
+  CheckCircle
 } from 'lucide-react';
+import { useGetUserProfileQuery, useUpdateUserProfileMutation } from '@/store/api/apiSlice';
+import { SkeletonCard } from '@/components/ui/loading/SkeletonCard';
+import FileUpload from '@/components/common/FileUpload';
+import { toast } from 'sonner';
+import { formatFullCurrency } from '@/lib/utils/currency';
 
-export default async function UserProfilePage() {
-  const session = await getAuthSession();
-  
-  if (!session?.user || session.user.role !== 'user') {
-    redirect('/login');
+export default function UserProfilePage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  const [isEditing, setIsEditing] = useState(false);
+  const [formData, setFormData] = useState<any>({});
+
+  // Redirect if not authenticated
+  if (status === 'loading') {
+    return <div>Loading...</div>;
   }
 
-  // TODO: Replace with actual API call
-  const userProfile = {
-    personalInfo: {
-      firstName: 'John',
-      lastName: 'Doe',
-      email: 'john.doe@example.com',
-      phone: '+91 9876543210',
-      dateOfBirth: '1995-05-15',
-      profilePicture: null,
-      address: '123 Main Street, Sector 15, Bangalore, Karnataka - 560001',
-      aadharNumber: '1234-5678-9012',
-      panNumber: 'ABCDE1234F'
-    },
-    educationInfo: {
-      currentInstitution: 'Stanford University',
-      course: 'MS Computer Science',
-      yearOfStudy: '1st Year',
-      expectedGraduation: '2026-06-15',
-      previousEducation: 'B.Tech Computer Science - IIT Delhi (2017)',
-      cgpa: '8.5'
-    },
-    financialInfo: {
-      annualIncome: 1200000,
-      employmentType: 'Salaried',
-      employerName: 'Tech Corp India',
-      workExperience: '3 years',
-      monthlyIncome: 100000,
-      otherIncome: 0
-    },
-    applicationStats: {
-      totalApplications: 2,
-      approvedApplications: 1,
-      pendingApplications: 1,
-      rejectedApplications: 0,
-      totalLoanAmount: 500000,
-      activeLoanAmount: 500000
-    },
-    documents: {
-      aadharCard: { status: 'verified', uploadedAt: '2024-12-01' },
-      panCard: { status: 'verified', uploadedAt: '2024-12-01' },
-      incomeProof: { status: 'verified', uploadedAt: '2024-12-02' },
-      bankStatements: { status: 'pending', uploadedAt: '2024-12-10' },
-      admissionLetter: { status: 'verified', uploadedAt: '2024-12-01' },
-      academicTranscripts: { status: 'verified', uploadedAt: '2024-12-01' }
+  if (!session?.user || session.user.role !== 'user') {
+    router.push('/login');
+    return null;
+  }
+
+  // Fetch user profile using RTK Query
+  const { 
+    data: profileData, 
+    isLoading, 
+    error,
+    refetch 
+  } = useGetUserProfileQuery(session.user.id);
+
+  const [updateProfile, { isLoading: isUpdating }] = useUpdateUserProfileMutation();
+
+  const userProfile = profileData?.profile;
+
+  // Initialize form data when profile loads
+  useEffect(() => {
+    if (userProfile && Object.keys(formData).length === 0) {
+      setFormData(userProfile);
+    }
+  }, [userProfile, formData]);
+
+  const handleInputChange = (section: string, field: string, value: any) => {
+    setFormData((prev: any) => ({
+      ...prev,
+      [section]: {
+        ...prev[section],
+        [field]: value
+      }
+    }));
+  };
+
+  const handleSave = async () => {
+    try {
+      await updateProfile({
+        userId: session.user.id,
+        profileData: formData
+      }).unwrap();
+      
+      setIsEditing(false);
+      toast.success('Profile updated successfully');
+      refetch();
+    } catch (error: any) {
+      toast.error(error?.data?.error || 'Failed to update profile');
     }
   };
 
-  const getInitials = (firstName: string, lastName: string) => {
-    return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
+  const handleCancel = () => {
+    setFormData(userProfile);
+    setIsEditing(false);
   };
 
-  const getDocumentStatusColor = (status: string) => {
-    switch (status) {
-      case 'verified':
-        return 'bg-green-100 text-green-800';
-      case 'pending':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'rejected':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
+  const handleProfilePictureUpload = (files: any[]) => {
+    if (files.length > 0) {
+      const file = files[0];
+      handleInputChange('personalInfo', 'profilePicture', file.fileUrl);
+      toast.success('Profile picture updated');
     }
   };
+
+  if (error) {
+    return (
+      <DashboardLayout>
+        <div className="p-6">
+          <div className="text-center py-12">
+            <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Error Loading Profile</h3>
+            <p className="text-gray-600 mb-4">Failed to load your profile. Please try again.</p>
+            <Button onClick={() => refetch()}>Retry</Button>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <div className="p-6 space-y-6">
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!userProfile) {
+    return (
+      <DashboardLayout>
+        <div className="p-6">
+          <div className="text-center py-12">
+            <User className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Profile Not Found</h3>
+            <p className="text-gray-600">Your profile information is not available.</p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
-      <div className="space-y-6 lg:space-y-8">
+      <div className="p-6 space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">My Profile</h1>
-            <p className="text-slate-600">Manage your personal information and preferences</p>
+            <h1 className="text-2xl font-bold text-gray-900">My Profile</h1>
+            <p className="text-gray-600">Manage your personal information and preferences</p>
           </div>
-          <Button className="bg-blue-600 hover:bg-blue-700">
-            <Edit className="h-4 w-4 mr-2" />
-            Edit Profile
-          </Button>
+          <div className="flex items-center gap-2">
+            {isEditing ? (
+              <>
+                <Button variant="outline" onClick={handleCancel} disabled={isUpdating}>
+                  Cancel
+                </Button>
+                <Button onClick={handleSave} disabled={isUpdating}>
+                  {isUpdating ? (
+                    <>
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent mr-2" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4 mr-2" />
+                      Save Changes
+                    </>
+                  )}
+                </Button>
+              </>
+            ) : (
+              <Button onClick={() => setIsEditing(true)}>
+                <Edit className="h-4 w-4 mr-2" />
+                Edit Profile
+              </Button>
+            )}
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
-          {/* Profile Overview */}
-          <div className="lg:col-span-1 space-y-6">
-            {/* Profile Card */}
-            <Card className="bg-white border border-slate-200">
-              <CardContent className="p-6 text-center">
-                <div className="relative inline-block mb-4">
-                  <Avatar className="h-24 w-24 mx-auto">
-                    <AvatarImage src={userProfile.personalInfo.profilePicture || undefined} />
-                    <AvatarFallback className="bg-blue-600 text-white text-xl">
-                      {getInitials(userProfile.personalInfo.firstName, userProfile.personalInfo.lastName)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <Button
-                    
-                    className="absolute -bottom-2 -right-2 h-8 w-8 rounded-full p-0 bg-blue-600 hover:bg-blue-700"
-                  >
-                    <Camera className="h-4 w-4" />
-                  </Button>
-                </div>
-                <h3 className="text-xl font-semibold text-slate-900 mb-1">
-                  {userProfile.personalInfo.firstName} {userProfile.personalInfo.lastName}
+        {/* Profile Picture & Basic Info */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <User className="h-5 w-5" />
+              Personal Information
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Profile Picture */}
+            <div className="flex items-center space-x-6">
+              <div className="relative">
+                <Avatar className="h-24 w-24">
+                  <AvatarImage src={formData.personalInfo?.profilePicture} />
+                  <AvatarFallback className="text-lg">
+                    {formData.personalInfo?.firstName?.[0]}{formData.personalInfo?.lastName?.[0]}
+                  </AvatarFallback>
+                </Avatar>
+                {isEditing && (
+                  <div className="absolute inset-0 bg-black bg-opacity-50 rounded-full flex items-center justify-center">
+                    <Camera className="h-6 w-6 text-white" />
+                  </div>
+                )}
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  {formData.personalInfo?.firstName} {formData.personalInfo?.lastName}
                 </h3>
-                <p className="text-slate-600 mb-2">{userProfile.educationInfo.course}</p>
-                <Badge className="bg-blue-100 text-blue-800 mb-4">
-                  {userProfile.educationInfo.currentInstitution}
+                <p className="text-gray-600">{formData.personalInfo?.email}</p>
+                <Badge variant="outline" className="mt-2">
+                  <Shield className="h-3 w-3 mr-1" />
+                  Verified User
                 </Badge>
-                <div className="text-sm text-slate-600">
-                  <div className="flex items-center justify-center gap-1 mb-1">
-                    <GraduationCap className="h-4 w-4" />
-                    {userProfile.educationInfo.yearOfStudy}
-                  </div>
-                  <div className="flex items-center justify-center gap-1">
-                    <Calendar className="h-4 w-4" />
-                    Expected Graduation: {new Date(userProfile.educationInfo.expectedGraduation).getFullYear()}
-                  </div>
+              </div>
+              {isEditing && (
+                <div className="w-64">
+                  <FileUpload
+                    documentType="profile_picture"
+                    maxFiles={1}
+                    onFilesChange={handleProfilePictureUpload}
+                  />
                 </div>
-              </CardContent>
-            </Card>
+              )}
+            </div>
 
-            {/* Application Stats */}
-            <Card className="bg-white border border-slate-200">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="h-5 w-5 text-blue-600" />
-                  Application Summary
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="text-center p-3 bg-blue-50 rounded-lg">
-                    <div className="text-2xl font-bold text-blue-600">{userProfile.applicationStats.totalApplications}</div>
-                    <div className="text-sm text-slate-600">Total Applications</div>
-                  </div>
-                  <div className="text-center p-3 bg-green-50 rounded-lg">
-                    <div className="text-2xl font-bold text-green-600">{userProfile.applicationStats.approvedApplications}</div>
-                    <div className="text-sm text-slate-600">Approved</div>
-                  </div>
-                </div>
-                <div className="text-center p-3 bg-purple-50 rounded-lg">
-                  <div className="text-xl font-bold text-purple-600">
-                    ₹{(userProfile.applicationStats.activeLoanAmount / 100000).toFixed(1)}L
-                  </div>
-                  <div className="text-sm text-slate-600">Active Loan Amount</div>
-                </div>
-                <div className="text-center p-3 bg-yellow-50 rounded-lg">
-                  <div className="text-lg font-bold text-yellow-600">
-                    {userProfile.applicationStats.pendingApplications}
-                  </div>
-                  <div className="text-sm text-slate-600">Pending Applications</div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+            <Separator />
 
-          {/* Profile Details */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Personal Information */}
-            <Card className="bg-white border border-slate-200">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <User className="h-5 w-5 text-blue-600" />
-                  Personal Information
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="firstName">First Name</Label>
-                    <Input id="firstName" value={userProfile.personalInfo.firstName} readOnly />
-                  </div>
-                  <div>
-                    <Label htmlFor="lastName">Last Name</Label>
-                    <Input id="lastName" value={userProfile.personalInfo.lastName} readOnly />
-                  </div>
-                  <div>
-                    <Label htmlFor="email">Email Address</Label>
-                    <Input id="email" value={userProfile.personalInfo.email} readOnly />
-                  </div>
-                  <div>
-                    <Label htmlFor="phone">Phone Number</Label>
-                    <Input id="phone" value={userProfile.personalInfo.phone} readOnly />
-                  </div>
-                  <div>
-                    <Label htmlFor="dateOfBirth">Date of Birth</Label>
-                    <Input 
-                      id="dateOfBirth" 
-                      value={new Date(userProfile.personalInfo.dateOfBirth).toLocaleDateString()} 
-                      readOnly 
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="panNumber">PAN Number</Label>
-                    <Input id="panNumber" value={userProfile.personalInfo.panNumber} readOnly />
-                  </div>
-                </div>
-                <div>
-                  <Label htmlFor="address">Address</Label>
-                  <Textarea id="address" value={userProfile.personalInfo.address} readOnly rows={2} />
-                </div>
-              </CardContent>
-            </Card>
+            {/* Personal Details */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label htmlFor="firstName">First Name</Label>
+                {isEditing ? (
+                  <Input
+                    id="firstName"
+                    value={formData.personalInfo?.firstName || ''}
+                    onChange={(e) => handleInputChange('personalInfo', 'firstName', e.target.value)}
+                  />
+                ) : (
+                  <p className="text-sm text-gray-900">{formData.personalInfo?.firstName || 'Not provided'}</p>
+                )}
+              </div>
 
-            {/* Education Information */}
-            <Card className="bg-white border border-slate-200">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <GraduationCap className="h-5 w-5 text-blue-600" />
-                  Education Information
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="currentInstitution">Current Institution</Label>
-                    <Input id="currentInstitution" value={userProfile.educationInfo.currentInstitution} readOnly />
-                  </div>
-                  <div>
-                    <Label htmlFor="course">Course</Label>
-                    <Input id="course" value={userProfile.educationInfo.course} readOnly />
-                  </div>
-                  <div>
-                    <Label htmlFor="yearOfStudy">Year of Study</Label>
-                    <Input id="yearOfStudy" value={userProfile.educationInfo.yearOfStudy} readOnly />
-                  </div>
-                  <div>
-                    <Label htmlFor="cgpa">CGPA</Label>
-                    <Input id="cgpa" value={userProfile.educationInfo.cgpa} readOnly />
-                  </div>
-                  <div>
-                    <Label htmlFor="expectedGraduation">Expected Graduation</Label>
-                    <Input 
-                      id="expectedGraduation" 
-                      value={new Date(userProfile.educationInfo.expectedGraduation).toLocaleDateString()} 
-                      readOnly 
-                    />
-                  </div>
-                </div>
-                <div>
-                  <Label htmlFor="previousEducation">Previous Education</Label>
-                  <Input id="previousEducation" value={userProfile.educationInfo.previousEducation} readOnly />
-                </div>
-              </CardContent>
-            </Card>
+              <div className="space-y-2">
+                <Label htmlFor="lastName">Last Name</Label>
+                {isEditing ? (
+                  <Input
+                    id="lastName"
+                    value={formData.personalInfo?.lastName || ''}
+                    onChange={(e) => handleInputChange('personalInfo', 'lastName', e.target.value)}
+                  />
+                ) : (
+                  <p className="text-sm text-gray-900">{formData.personalInfo?.lastName || 'Not provided'}</p>
+                )}
+              </div>
 
-            {/* Financial Information */}
-            <Card className="bg-white border border-slate-200">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <CreditCard className="h-5 w-5 text-blue-600" />
-                  Financial Information
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="employmentType">Employment Type</Label>
-                    <Input id="employmentType" value={userProfile.financialInfo.employmentType} readOnly />
-                  </div>
-                  <div>
-                    <Label htmlFor="employerName">Employer Name</Label>
-                    <Input id="employerName" value={userProfile.financialInfo.employerName} readOnly />
-                  </div>
-                  <div>
-                    <Label htmlFor="workExperience">Work Experience</Label>
-                    <Input id="workExperience" value={userProfile.financialInfo.workExperience} readOnly />
-                  </div>
-                  <div>
-                    <Label htmlFor="annualIncome">Annual Income</Label>
-                    <Input 
-                      id="annualIncome" 
-                      value={`₹${userProfile.financialInfo.annualIncome.toLocaleString()}`} 
-                      readOnly 
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="monthlyIncome">Monthly Income</Label>
-                    <Input 
-                      id="monthlyIncome" 
-                      value={`₹${userProfile.financialInfo.monthlyIncome.toLocaleString()}`} 
-                      readOnly 
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="otherIncome">Other Income</Label>
-                    <Input 
-                      id="otherIncome" 
-                      value={`₹${userProfile.financialInfo.otherIncome.toLocaleString()}`} 
-                      readOnly 
-                    />
-                  </div>
+              <div className="space-y-2">
+                <Label htmlFor="email">Email Address</Label>
+                <div className="flex items-center gap-2">
+                  <Mail className="h-4 w-4 text-gray-400" />
+                  <p className="text-sm text-gray-900">{formData.personalInfo?.email}</p>
+                  <CheckCircle className="h-4 w-4 text-green-500" />
                 </div>
-              </CardContent>
-            </Card>
+              </div>
 
-            {/* Document Status */}
-            <Card className="bg-white border border-slate-200">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Shield className="h-5 w-5 text-blue-600" />
-                  Document Verification Status
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {Object.entries(userProfile.documents).map(([key, doc]) => (
-                    <div key={key} className="flex items-center justify-between p-3 border border-slate-200 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <FileText className="h-4 w-4 text-slate-400" />
-                        <div>
-                          <div className="font-medium text-slate-900 capitalize">
-                            {key.replace(/([A-Z])/g, ' $1').trim()}
-                          </div>
-                          <div className="text-xs text-slate-500">
-                            Uploaded {new Date(doc.uploadedAt).toLocaleDateString()}
-                          </div>
-                        </div>
-                      </div>
-                      <Badge className={getDocumentStatusColor(doc.status)} >
-                        {doc.status}
-                      </Badge>
-                    </div>
-                  ))}
+              <div className="space-y-2">
+                <Label htmlFor="phone">Phone Number</Label>
+                {isEditing ? (
+                  <Input
+                    id="phone"
+                    value={formData.personalInfo?.phone || ''}
+                    onChange={(e) => handleInputChange('personalInfo', 'phone', e.target.value)}
+                  />
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Phone className="h-4 w-4 text-gray-400" />
+                    <p className="text-sm text-gray-900">{formData.personalInfo?.phone || 'Not provided'}</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="dateOfBirth">Date of Birth</Label>
+                {isEditing ? (
+                  <Input
+                    id="dateOfBirth"
+                    type="date"
+                    value={formData.personalInfo?.dateOfBirth || ''}
+                    onChange={(e) => handleInputChange('personalInfo', 'dateOfBirth', e.target.value)}
+                  />
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-gray-400" />
+                    <p className="text-sm text-gray-900">
+                      {formData.personalInfo?.dateOfBirth 
+                        ? new Date(formData.personalInfo.dateOfBirth).toLocaleDateString()
+                        : 'Not provided'
+                      }
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="aadharNumber">Aadhar Number</Label>
+                <div className="flex items-center gap-2">
+                  <CreditCard className="h-4 w-4 text-gray-400" />
+                  <p className="text-sm text-gray-900">
+                    {formData.personalInfo?.aadharNumber 
+                      ? `****-****-${formData.personalInfo.aadharNumber.slice(-4)}`
+                      : 'Not provided'
+                    }
+                  </p>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+              </div>
+            </div>
+
+            {/* Address */}
+            <div className="space-y-2">
+              <Label htmlFor="address">Address</Label>
+              {isEditing ? (
+                <Textarea
+                  id="address"
+                  value={formData.personalInfo?.address || ''}
+                  onChange={(e) => handleInputChange('personalInfo', 'address', e.target.value)}
+                  rows={3}
+                />
+              ) : (
+                <div className="flex items-start gap-2">
+                  <MapPin className="h-4 w-4 text-gray-400 mt-0.5" />
+                  <p className="text-sm text-gray-900">{formData.personalInfo?.address || 'Not provided'}</p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Education Information */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <GraduationCap className="h-5 w-5" />
+              Education Information
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label>Current Institution</Label>
+                <p className="text-sm text-gray-900">
+                  {formData.educationInfo?.currentInstitution || 'Not provided'}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label>Course</Label>
+                <p className="text-sm text-gray-900">
+                  {formData.educationInfo?.course || 'Not provided'}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label>Duration</Label>
+                <p className="text-sm text-gray-900">
+                  {formData.educationInfo?.duration || 'Not provided'}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label>Fee Structure</Label>
+                <p className="text-sm text-gray-900">
+                  {formData.educationInfo?.feeStructure 
+                    ? formatFullCurrency(formData.educationInfo.feeStructure)
+                    : 'Not provided'
+                  }
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Financial Information */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Building className="h-5 w-5" />
+              Financial Information
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label>Annual Income</Label>
+                <p className="text-sm text-gray-900">
+                  {formData.financialInfo?.annualIncome 
+                    ? formatFullCurrency(formData.financialInfo.annualIncome)
+                    : 'Not provided'
+                  }
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label>Employment Type</Label>
+                <p className="text-sm text-gray-900">
+                  {formData.financialInfo?.employmentType || 'Not provided'}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label>Employer Name</Label>
+                <p className="text-sm text-gray-900">
+                  {formData.financialInfo?.employerName || 'Not provided'}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label>Work Experience</Label>
+                <p className="text-sm text-gray-900">
+                  {formData.financialInfo?.workExperience || 'Not provided'}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Account Status */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5" />
+              Account Status
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="text-center">
+                <CheckCircle className="h-8 w-8 text-green-500 mx-auto mb-2" />
+                <p className="text-sm font-medium text-gray-900">Email Verified</p>
+                <p className="text-xs text-gray-600">Your email is verified</p>
+              </div>
+              <div className="text-center">
+                <CheckCircle className="h-8 w-8 text-green-500 mx-auto mb-2" />
+                <p className="text-sm font-medium text-gray-900">Phone Verified</p>
+                <p className="text-xs text-gray-600">Your phone is verified</p>
+              </div>
+              <div className="text-center">
+                <FileText className="h-8 w-8 text-blue-500 mx-auto mb-2" />
+                <p className="text-sm font-medium text-gray-900">Documents</p>
+                <p className="text-xs text-gray-600">
+                  {formData.documents?.length || 0} documents uploaded
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </DashboardLayout>
   );

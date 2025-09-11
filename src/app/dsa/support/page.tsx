@@ -1,5 +1,8 @@
-import { getAuthSession } from '@/lib/auth/utils';
-import { redirect } from 'next/navigation';
+'use client';
+
+import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import { DashboardLayout } from '@/components/layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,12 +10,12 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { 
-  HelpCircle, 
-  MessageSquare, 
-  Phone, 
-  Mail, 
-  FileText, 
+import {
+  HelpCircle,
+  MessageSquare,
+  Phone,
+  Mail,
+  FileText,
   Clock,
   CheckCircle,
   AlertCircle,
@@ -20,47 +23,78 @@ import {
   Plus,
   ExternalLink
 } from 'lucide-react';
+import {
+  useGetSupportTicketsQuery,
+  useCreateSupportTicketMutation,
+  useUpdateSupportTicketMutation
+} from '@/store/api/apiSlice';
+import LoadingSpinner from '@/components/common/LoadingSpinner';
+import { safeString, safeDate, safeTimeAgo } from '@/lib/utils/fallbacks';
+import { toast } from 'sonner';
 
-export default async function DSASupportPage() {
-  const session = await getAuthSession();
-  
-  if (!session?.user || session.user.role !== 'dsa') {
-    redirect('/login');
+export default function DSASupportPage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+
+  if (status === 'loading') {
+    return <LoadingSpinner />;
   }
 
-  // TODO: Replace with actual API calls
-  const supportTickets = [
-    {
-      id: 'ST202412001',
-      title: 'Unable to update application status',
-      category: 'Technical',
-      priority: 'high',
-      status: 'open',
-      createdAt: '2024-12-11T10:30:00Z',
-      lastUpdated: '2024-12-11T14:20:00Z',
-      description: 'Getting error when trying to update application status from pending to under review.'
-    },
-    {
-      id: 'ST202412002',
-      title: 'Question about document verification process',
-      category: 'Process',
-      priority: 'medium',
-      status: 'in_progress',
-      createdAt: '2024-12-10T15:45:00Z',
-      lastUpdated: '2024-12-11T09:15:00Z',
-      description: 'Need clarification on the new document verification guidelines.'
-    },
-    {
-      id: 'ST202412003',
-      title: 'Commission calculation discrepancy',
-      category: 'Financial',
-      priority: 'high',
-      status: 'resolved',
-      createdAt: '2024-12-09T11:20:00Z',
-      lastUpdated: '2024-12-10T16:30:00Z',
-      description: 'Commission amount for November seems incorrect in the statement.'
+  if (!session?.user || session.user.role !== 'dsa') {
+    router.push('/login');
+    return null;
+  }
+
+  const [statusFilter, setStatusFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [newTicket, setNewTicket] = useState({
+    subject: '',
+    description: '',
+    category: 'technical' as const,
+    priority: 'medium' as const
+  });
+
+  // RTK Query hooks
+  const {
+    data: ticketsData,
+    isLoading: ticketsLoading,
+    error: ticketsError,
+    refetch: refetchTickets
+  } = useGetSupportTicketsQuery({
+    status: statusFilter || undefined,
+    category: categoryFilter || undefined,
+    limit: 20,
+    page: 1
+  });
+
+  const [createTicket, { isLoading: createLoading }] = useCreateSupportTicketMutation();
+  const [updateTicket] = useUpdateSupportTicketMutation();
+
+  const supportTickets = ticketsData?.tickets || [];
+
+  const handleCreateTicket = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!newTicket.subject.trim() || !newTicket.description.trim()) {
+      toast.error('Please fill in all required fields');
+      return;
     }
-  ];
+
+    try {
+      await createTicket(newTicket).unwrap();
+      toast.success('Support ticket created successfully');
+      setNewTicket({
+        subject: '',
+        description: '',
+        category: 'technical',
+        priority: 'medium'
+      });
+      refetchTickets();
+    } catch (error) {
+      toast.error('Failed to create support ticket');
+      console.error('Error creating ticket:', error);
+    }
+  };
 
   const faqs = [
     {

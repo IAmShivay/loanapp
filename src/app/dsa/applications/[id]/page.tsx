@@ -33,9 +33,9 @@ import {
 import Link from 'next/link';
 
 interface DSAApplicationDetailPageProps {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 export default async function DSAApplicationDetailPage({ params }: DSAApplicationDetailPageProps) {
@@ -45,9 +45,11 @@ export default async function DSAApplicationDetailPage({ params }: DSAApplicatio
     redirect('/login');
   }
 
+  const { id } = await params;
+
   // TODO: Replace with actual API call - ensure application is assigned to this DSA
   const application = {
-    id: params.id,
+    id: id,
     applicationId: 'LA202412001',
     status: 'under_review',
     priority: 'high',

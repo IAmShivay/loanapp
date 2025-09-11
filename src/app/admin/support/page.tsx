@@ -1,5 +1,8 @@
-import { getAuthSession } from '@/lib/auth/utils';
-import { redirect } from 'next/navigation';
+'use client';
+
+import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import { DashboardLayout } from '@/components/layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,81 +11,86 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Search, Filter, MoreHorizontal, Eye, MessageSquare, Clock, User, AlertCircle } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import {
+  useGetSupportTicketsQuery,
+  useUpdateSupportTicketMutation,
+  useDeleteSupportTicketMutation
+} from '@/store/api/apiSlice';
+import LoadingSpinner from '@/components/common/LoadingSpinner';
+import { safeString, safeDate, safeTimeAgo } from '@/lib/utils/fallbacks';
+import { toast } from 'sonner';
 
-export default async function AdminSupportPage() {
-  const session = await getAuthSession();
-  
-  if (!session?.user || session.user.role !== 'admin') {
-    redirect('/login');
+export default function AdminSupportPage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+
+  if (status === 'loading') {
+    return <LoadingSpinner />;
   }
 
-  // TODO: Replace with actual API call
-  const supportTickets = [
-    {
-      id: 'TKT-001',
-      subject: 'Document upload issue',
-      category: 'Technical',
-      status: 'open',
-      priority: 'high',
-      createdAt: '2024-12-10T10:00:00Z',
-      lastUpdated: '2024-12-11T14:30:00Z',
-      user: {
-        name: 'John Doe',
-        email: 'john.doe@example.com',
-        id: 'user123'
-      },
-      assignedTo: 'Support Team',
-      description: 'Unable to upload bank statements. Getting error message when trying to upload PDF files.'
-    },
-    {
-      id: 'TKT-002',
-      subject: 'Application status inquiry',
-      category: 'General',
-      status: 'in_progress',
-      priority: 'medium',
-      createdAt: '2024-12-08T09:15:00Z',
-      lastUpdated: '2024-12-09T16:45:00Z',
-      user: {
-        name: 'Jane Smith',
-        email: 'jane.smith@example.com',
-        id: 'user456'
-      },
-      assignedTo: 'DSA Team',
-      description: 'Need clarification on current application status and next steps.'
-    },
-    {
-      id: 'TKT-003',
-      subject: 'EMI calculation discrepancy',
-      category: 'Financial',
-      status: 'resolved',
-      priority: 'low',
-      createdAt: '2024-12-07T14:20:00Z',
-      lastUpdated: '2024-12-08T11:30:00Z',
-      user: {
-        name: 'Mike Wilson',
-        email: 'mike.wilson@example.com',
-        id: 'user789'
-      },
-      assignedTo: 'Finance Team',
-      description: 'EMI amount shown in portal differs from what was discussed with DSA.'
-    },
-    {
-      id: 'TKT-004',
-      subject: 'Login issues',
-      category: 'Technical',
-      status: 'open',
-      priority: 'high',
-      createdAt: '2024-12-11T08:45:00Z',
-      lastUpdated: '2024-12-11T08:45:00Z',
-      user: {
-        name: 'Sarah Davis',
-        email: 'sarah.davis@example.com',
-        id: 'user101'
-      },
-      assignedTo: 'Tech Support',
-      description: 'Cannot login to account. Password reset not working.'
+  if (!session?.user || session.user.role !== 'admin') {
+    router.push('/login');
+    return null;
+  }
+
+  const [statusFilter, setStatusFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [priorityFilter, setPriorityFilter] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // RTK Query hooks
+  const {
+    data: ticketsData,
+    isLoading: ticketsLoading,
+    error: ticketsError,
+    refetch: refetchTickets
+  } = useGetSupportTicketsQuery({
+    status: statusFilter || undefined,
+    category: categoryFilter || undefined,
+    priority: priorityFilter || undefined,
+    limit: 50,
+    page: 1
+  });
+
+  const [updateTicket] = useUpdateSupportTicketMutation();
+  const [deleteTicket] = useDeleteSupportTicketMutation();
+
+  const supportTickets = ticketsData?.tickets || [];
+
+  const handleStatusUpdate = async (ticketId: string, newStatus: string) => {
+    try {
+      await updateTicket({ ticketId, status: newStatus }).unwrap();
+      toast.success('Ticket status updated successfully');
+      refetchTickets();
+    } catch (error) {
+      toast.error('Failed to update ticket status');
+      console.error('Error updating ticket:', error);
     }
-  ];
+  };
+
+  const handleAssignTicket = async (ticketId: string, assignedTo: string) => {
+    try {
+      await updateTicket({ ticketId, assignedTo }).unwrap();
+      toast.success('Ticket assigned successfully');
+      refetchTickets();
+    } catch (error) {
+      toast.error('Failed to assign ticket');
+      console.error('Error assigning ticket:', error);
+    }
+  };
+
+  const handleDeleteTicket = async (ticketId: string) => {
+    if (!confirm('Are you sure you want to delete this ticket?')) return;
+
+    try {
+      await deleteTicket(ticketId).unwrap();
+      toast.success('Ticket deleted successfully');
+      refetchTickets();
+    } catch (error) {
+      toast.error('Failed to delete ticket');
+      console.error('Error deleting ticket:', error);
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -114,23 +122,35 @@ export default async function AdminSupportPage() {
 
   const getCategoryColor = (category: string) => {
     switch (category) {
-      case 'Technical':
+      case 'technical':
         return 'bg-blue-100 text-blue-800';
-      case 'Financial':
-        return 'bg-purple-100 text-purple-800';
-      case 'General':
+      case 'general':
         return 'bg-gray-100 text-gray-800';
-      case 'Application':
+      case 'billing':
+        return 'bg-green-100 text-green-800';
+      case 'process':
+        return 'bg-purple-100 text-purple-800';
+      case 'other':
         return 'bg-orange-100 text-orange-800';
       default:
         return 'bg-gray-100 text-gray-800';
     }
   };
 
+
+
   const openTickets = supportTickets.filter(ticket => ticket.status === 'open').length;
   const inProgressTickets = supportTickets.filter(ticket => ticket.status === 'in_progress').length;
   const resolvedTickets = supportTickets.filter(ticket => ticket.status === 'resolved').length;
   const highPriorityTickets = supportTickets.filter(ticket => ticket.priority === 'high').length;
+
+  if (ticketsLoading) {
+    return (
+      <DashboardLayout>
+        <LoadingSpinner />
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -282,13 +302,13 @@ export default async function AdminSupportPage() {
                 </thead>
                 <tbody>
                   {supportTickets.map((ticket) => (
-                    <tr key={ticket.id} className="border-b border-slate-100 hover:bg-slate-50">
+                    <tr key={ticket._id} className="border-b border-slate-100 hover:bg-slate-50">
                       <td className="p-4">
                         <div>
-                          <div className="font-semibold text-slate-900">#{ticket.id}</div>
-                          <div className="text-sm text-slate-600 max-w-xs truncate">{ticket.subject}</div>
+                          <div className="font-semibold text-slate-900">#{safeString(ticket.ticketNumber)}</div>
+                          <div className="text-sm text-slate-600 max-w-xs truncate">{safeString(ticket.subject)}</div>
                           <div className="text-xs text-slate-500 mt-1">
-                            Created {new Date(ticket.createdAt).toLocaleDateString()}
+                            Created {safeDate(ticket.createdAt)}
                           </div>
                         </div>
                       </td>
@@ -298,8 +318,10 @@ export default async function AdminSupportPage() {
                             <User className="h-4 w-4 text-white" />
                           </div>
                           <div>
-                            <div className="font-medium text-slate-900">{ticket.user.name}</div>
-                            <div className="text-sm text-slate-500">{ticket.user.email}</div>
+                            <div className="font-medium text-slate-900">
+                              {safeString(ticket.userId?.firstName)} {safeString(ticket.userId?.lastName)}
+                            </div>
+                            <div className="text-sm text-slate-500">{safeString(ticket.userId?.email)}</div>
                           </div>
                         </div>
                       </td>
@@ -319,14 +341,19 @@ export default async function AdminSupportPage() {
                         </Badge>
                       </td>
                       <td className="p-4">
-                        <div className="text-sm text-slate-900">{ticket.assignedTo}</div>
+                        <div className="text-sm text-slate-900">
+                          {ticket.assignedTo ?
+                            `${safeString(ticket.assignedTo.firstName)} ${safeString(ticket.assignedTo.lastName)}` :
+                            'Unassigned'
+                          }
+                        </div>
                       </td>
                       <td className="p-4">
                         <div className="text-sm text-slate-900">
-                          {new Date(ticket.lastUpdated).toLocaleDateString()}
+                          {safeDate(ticket.updatedAt)}
                         </div>
                         <div className="text-xs text-slate-500">
-                          {new Date(ticket.lastUpdated).toLocaleTimeString()}
+                          {safeTimeAgo(ticket.updatedAt)}
                         </div>
                       </td>
                       <td className="p-4">

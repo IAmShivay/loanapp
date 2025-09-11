@@ -1,5 +1,8 @@
-import { getAuthSession } from '@/lib/auth/utils';
-import { redirect } from 'next/navigation';
+'use client';
+
+import { useSession } from 'next-auth/react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react';
 import { DashboardLayout } from '@/components/layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -20,395 +23,278 @@ import {
   User,
   Users,
   CheckCircle,
-  XCircle
+  XCircle,
+  AlertCircle,
+  Plus
 } from 'lucide-react';
+import { useGetChatsQuery, useGetApplicationsQuery, useCreateChatMutation } from '@/store/api/apiSlice';
+import { SkeletonCard } from '@/components/ui/loading/SkeletonCard';
+import ChatWindow from '@/components/chat/ChatWindow';
+import { toast } from 'sonner';
 
-export default async function UserChatPage() {
-  const session = await getAuthSession();
+function ChatPageContent() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const applicationId = searchParams.get('applicationId');
   
-  if (!session?.user || session.user.role !== 'user') {
-    redirect('/login');
+  const [selectedChat, setSelectedChat] = useState<string | null>(null);
+  const [selectedApplication, setSelectedApplication] = useState<string | null>(applicationId);
+
+  // Redirect if not authenticated
+  if (status === 'loading') {
+    return <div>Loading...</div>;
   }
 
-  // TODO: Replace with actual API calls
-  const userApplications = [
-    {
-      id: 'app1',
-      applicationId: 'LA202412001',
-      status: 'partially_approved',
-      canSelectDSA: true,
-      availableDSAs: [
-        {
-          id: 'dsa1',
-          name: 'Jane Smith',
-          email: 'jane.smith@sbi.co.in',
-          reviewStatus: 'approved',
-          isSelected: true
-        },
-        {
-          id: 'dsa2',
-          name: 'Raj Kumar',
-          email: 'raj.kumar@hdfc.co.in',
-          reviewStatus: 'pending',
-          isSelected: false
-        }
-      ]
+  if (!session?.user || session.user.role !== 'user') {
+    router.push('/login');
+    return null;
+  }
+
+  // Fetch user's chats
+  const { 
+    data: chatsData, 
+    isLoading: isLoadingChats, 
+    error: chatsError,
+    refetch: refetchChats 
+  } = useGetChatsQuery({ userId: session.user.id });
+
+  // Fetch user's applications (for creating new chats)
+  const { 
+    data: applicationsData, 
+    isLoading: isLoadingApplications 
+  } = useGetApplicationsQuery({ 
+    userId: session.user.id,
+    status: 'partially_approved' // Only show applications that can have chats
+  });
+
+  const [createChat] = useCreateChatMutation();
+
+  const chats = chatsData?.chats || [];
+  const applications = applicationsData?.applications || [];
+
+  // Auto-select chat if applicationId is provided
+  useEffect(() => {
+    if (applicationId && chats.length > 0) {
+      const chat = chats.find(c => c.applicationId === applicationId);
+      if (chat) {
+        setSelectedChat(chat._id);
+      }
     }
-  ];
+  }, [applicationId, chats]);
 
-  const selectedApplication = userApplications[0];
-  const selectedDSA = selectedApplication.availableDSAs.find(dsa => dsa.isSelected);
-
-  const dsaInfo = {
-    name: selectedDSA?.name || 'Jane Smith',
-    designation: 'Senior DSA',
-    bank: 'SBI',
-    dsaId: 'SBI238001EMB',
-    phone: '+91 9876543210',
-    email: selectedDSA?.email || 'jane.smith@sbi.co.in',
-    status: 'online',
-    avatar: null,
-    specialization: ['Education Loans', 'Personal Loans']
+  const handleCreateChat = async (appId: string, dsaIds: string[]) => {
+    try {
+      const result = await createChat({
+        applicationId: appId,
+        participants: [session.user.id, ...dsaIds]
+      }).unwrap();
+      
+      setSelectedChat(result.chat._id);
+      refetchChats();
+      toast.success('Chat created successfully');
+    } catch (error: any) {
+      toast.error(error?.data?.error || 'Failed to create chat');
+    }
   };
 
-  const messages = [
-    {
-      id: '1',
-      senderId: 'dsa',
-      senderName: 'Jane Smith',
-      message: 'Hello! I\'m Jane Smith, your assigned DSA from SBI. I\'m here to help you with your education loan application.',
-      timestamp: '2024-12-10T10:00:00Z',
-      isOwn: false
-    },
-    {
-      id: '2',
-      senderId: session.user.id,
-      senderName: session.user.name,
-      message: 'Hi Jane! Thank you for reaching out. I have some questions about my application.',
-      timestamp: '2024-12-10T10:05:00Z',
-      isOwn: true
-    },
-    {
-      id: '3',
-      senderId: 'dsa',
-      senderName: 'Jane Smith',
-      message: 'Of course! I\'m here to help. What would you like to know about your application?',
-      timestamp: '2024-12-10T10:07:00Z',
-      isOwn: false
-    },
-    {
-      id: '4',
-      senderId: session.user.id,
-      senderName: session.user.name,
-      message: 'I noticed that my application status shows "document pending". Which documents are still required?',
-      timestamp: '2024-12-10T10:10:00Z',
-      isOwn: true
-    },
-    {
-      id: '5',
-      senderId: 'dsa',
-      senderName: 'Jane Smith',
-      message: 'Let me check your application details. You need to upload your bank statements for the last 6 months and salary slips for the last 3 months. These are required for income verification.',
-      timestamp: '2024-12-10T10:15:00Z',
-      isOwn: false
-    },
-    {
-      id: '6',
-      senderId: session.user.id,
-      senderName: session.user.name,
-      message: 'I have the bank statements ready. Where should I upload them?',
-      timestamp: '2024-12-10T10:20:00Z',
-      isOwn: true
-    },
-    {
-      id: '7',
-      senderId: 'dsa',
-      senderName: 'Jane Smith',
-      message: 'You can upload them directly in your application dashboard. Go to "My Applications" → Select your application → "Upload Documents" section. Make sure the files are in PDF format and under 5MB each.',
-      timestamp: '2024-12-10T10:25:00Z',
-      isOwn: false
-    },
-    {
-      id: '8',
-      senderId: session.user.id,
-      senderName: session.user.name,
-      message: 'Perfect! I\'ll upload them right away. How long does the review process usually take?',
-      timestamp: '2024-12-10T10:30:00Z',
-      isOwn: true
-    },
-    {
-      id: '9',
-      senderId: 'dsa',
-      senderName: 'Jane Smith',
-      message: 'Once you upload the documents, I\'ll review them within 24 hours. If everything looks good, your application will move to the final approval stage, which typically takes 2-3 business days.',
-      timestamp: '2024-12-10T10:35:00Z',
-      isOwn: false
-    }
-  ];
-
-  const getInitials = (name: string) => {
-    return name.split(' ').map(n => n[0]).join('').toUpperCase();
-  };
-
-  const getStatusColor = (status: string) => {
+  const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'online':
-        return 'bg-green-500';
-      case 'away':
-        return 'bg-yellow-500';
-      case 'offline':
-        return 'bg-gray-400';
+      case 'approved':
+        return <CheckCircle className="h-3 w-3 text-green-500" />;
+      case 'rejected':
+        return <XCircle className="h-3 w-3 text-red-500" />;
+      case 'under_review':
+        return <Clock className="h-3 w-3 text-yellow-500" />;
+      case 'partially_approved':
+        return <AlertCircle className="h-3 w-3 text-blue-500" />;
       default:
-        return 'bg-gray-400';
+        return <MessageSquare className="h-3 w-3 text-gray-400" />;
     }
   };
 
   const formatTime = (timestamp: string) => {
-    return new Date(timestamp).toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  const formatDate = (timestamp: string) => {
     const date = new Date(timestamp);
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-
-    if (date.toDateString() === today.toDateString()) {
-      return 'Today';
-    } else if (date.toDateString() === yesterday.toDateString()) {
-      return 'Yesterday';
+    const now = new Date();
+    const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
+    
+    if (diffInHours < 24) {
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } else if (diffInHours < 168) { // 7 days
+      return date.toLocaleDateString([], { weekday: 'short' });
     } else {
-      return date.toLocaleDateString();
+      return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
     }
   };
 
+  const selectedChatData = chats.find(chat => chat._id === selectedChat);
+
+  if (chatsError) {
+    return (
+      <DashboardLayout>
+        <div className="p-6">
+          <div className="text-center py-12">
+            <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Error Loading Chats</h3>
+            <p className="text-gray-600 mb-4">Failed to load your chats. Please try again.</p>
+            <Button onClick={() => refetchChats()}>Retry</Button>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   return (
     <DashboardLayout>
-      <div className="space-y-6 lg:space-y-8">
-        {/* Header */}
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Chat with DSA</h1>
-          <p className="text-slate-600">Get instant help from your assigned loan advisor</p>
-        </div>
+      <div className="h-[calc(100vh-4rem)] flex">
+        {/* Chat List Sidebar */}
+        <div className="w-80 border-r bg-white flex flex-col">
+          {/* Header */}
+          <div className="p-4 border-b">
+            <h1 className="text-xl font-semibold text-gray-900">Messages</h1>
+            <p className="text-sm text-gray-600">Chat with your assigned DSAs</p>
+          </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 lg:gap-8">
-          {/* DSA Info Sidebar */}
-          <div className="lg:col-span-1 space-y-6">
-            {/* DSA Selection */}
-            {selectedApplication.canSelectDSA && selectedApplication.availableDSAs.length > 1 && (
-              <Card className="bg-white border border-slate-200">
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <Users className="h-5 w-5 text-blue-600" />
-                    Select DSA
-                  </CardTitle>
-                  <CardDescription>Choose your preferred DSA for communication</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {selectedApplication.availableDSAs.map((dsa) => (
-                    <div
-                      key={dsa.id}
-                      className={`p-3 rounded-lg border cursor-pointer transition-colors ${
-                        dsa.isSelected
-                          ? 'border-blue-200 bg-blue-50'
-                          : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="font-medium text-slate-900">{dsa.name}</div>
-                          <div className="text-sm text-slate-600">{dsa.email}</div>
+          {/* Chat List */}
+          <ScrollArea className="flex-1">
+            {isLoadingChats ? (
+              <div className="p-4 space-y-3">
+                {[...Array(5)].map((_, i) => (
+                  <SkeletonCard key={i} />
+                ))}
+              </div>
+            ) : chats.length === 0 ? (
+              <div className="p-4 text-center">
+                <MessageSquare className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-sm font-semibold text-gray-900 mb-2">No Chats Yet</h3>
+                <p className="text-xs text-gray-600 mb-4">
+                  Start chatting with DSAs for your approved applications
+                </p>
+                
+                {/* Show available applications for chat */}
+                {!isLoadingApplications && applications.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-gray-700">Available Applications:</p>
+                    {applications.slice(0, 3).map((app: any) => (
+                      <div key={app._id} className="text-left p-2 border rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-xs font-medium">#{app.applicationId}</p>
+                            <p className="text-xs text-gray-600">{app.educationInfo.course}</p>
+                          </div>
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => {
+                              if (app.assignedDSAs && app.assignedDSAs.length > 0) {
+                                handleCreateChat(app._id, app.assignedDSAs.map((dsa: any) => dsa.userId));
+                              }
+                            }}
+                          >
+                            <Plus className="h-3 w-3" />
+                          </Button>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Badge className={
-                            dsa.reviewStatus === 'approved'
-                              ? 'bg-green-100 text-green-800'
-                              : dsa.reviewStatus === 'rejected'
-                              ? 'bg-red-100 text-red-800'
-                              : 'bg-yellow-100 text-yellow-800'
-                          }>
-                            {dsa.reviewStatus === 'approved' && <CheckCircle className="h-3 w-3 mr-1" />}
-                            {dsa.reviewStatus === 'rejected' && <XCircle className="h-3 w-3 mr-1" />}
-                            {dsa.reviewStatus === 'pending' && <Clock className="h-3 w-3 mr-1" />}
-                            {dsa.reviewStatus.charAt(0).toUpperCase() + dsa.reviewStatus.slice(1)}
-                          </Badge>
-                          {dsa.isSelected && (
-                            <Badge variant="outline" className="text-xs">Selected</Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="divide-y">
+                {chats.map((chat) => (
+                  <div
+                    key={chat._id}
+                    className={`p-4 cursor-pointer hover:bg-gray-50 transition-colors ${
+                      selectedChat === chat._id ? 'bg-blue-50 border-r-2 border-blue-500' : ''
+                    }`}
+                    onClick={() => setSelectedChat(chat._id)}
+                  >
+                    <div className="flex items-start space-x-3">
+                      <div className="flex-shrink-0">
+                        <div className="relative">
+                          <Avatar className="h-10 w-10">
+                            <AvatarFallback>
+                              {chat.participants.length > 2 ? (
+                                <Users className="h-5 w-5" />
+                              ) : (
+                                <User className="h-5 w-5" />
+                              )}
+                            </AvatarFallback>
+                          </Avatar>
+                          {chat.unreadCount > 0 && (
+                            <div className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                              {chat.unreadCount > 9 ? '9+' : chat.unreadCount}
+                            </div>
                           )}
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            )}
-            <Card className="bg-white border border-slate-200">
-              <CardHeader>
-                <CardTitle className="text-lg">Your DSA</CardTitle>
-                <CardDescription>Assigned loan advisor</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="text-center">
-                  <div className="relative inline-block mb-3">
-                    <Avatar className="h-16 w-16 mx-auto">
-                      <AvatarImage src={dsaInfo.avatar || undefined} />
-                      <AvatarFallback className="bg-blue-600 text-white text-lg">
-                        {getInitials(dsaInfo.name)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white ${getStatusColor(dsaInfo.status)}`}></div>
-                  </div>
-                  <h3 className="font-semibold text-slate-900">{dsaInfo.name}</h3>
-                  <p className="text-sm text-slate-600">{dsaInfo.designation}</p>
-                  <Badge className="bg-blue-100 text-blue-800 mt-2">
-                    {dsaInfo.bank} - {dsaInfo.dsaId}
-                  </Badge>
-                </div>
-
-                <div className="space-y-3 text-sm">
-                  <div className="flex items-center gap-2">
-                    <Phone className="h-4 w-4 text-slate-400" />
-                    <span className="text-slate-900">{dsaInfo.phone}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <MessageSquare className="h-4 w-4 text-slate-400" />
-                    <span className="text-slate-900">{dsaInfo.email}</span>
-                  </div>
-                </div>
-
-                <div>
-                  <h4 className="font-medium text-slate-900 mb-2">Specialization</h4>
-                  <div className="flex flex-wrap gap-1">
-                    {dsaInfo.specialization.map((spec, index) => (
-                      <Badge key={index} variant="outline" className="text-xs">
-                        {spec}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex gap-2">
-                  <Button size="sm" className="flex-1 bg-blue-600 hover:bg-blue-700">
-                    <Phone className="h-4 w-4 mr-1" />
-                    Call
-                  </Button>
-                  <Button size="sm" variant="outline" className="flex-1">
-                    <Video className="h-4 w-4 mr-1" />
-                    Video
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Chat Area */}
-          <div className="lg:col-span-3">
-            <Card className="bg-white border border-slate-200 h-[600px] flex flex-col">
-              {/* Chat Header */}
-              <CardHeader className="border-b border-slate-200 pb-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="relative">
-                      <Avatar className="h-10 w-10">
-                        <AvatarImage src={dsaInfo.avatar || undefined} />
-                        <AvatarFallback className="bg-blue-600 text-white">
-                          {getInitials(dsaInfo.name)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${getStatusColor(dsaInfo.status)}`}></div>
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-slate-900">{dsaInfo.name}</h3>
-                      <p className="text-sm text-slate-500 capitalize">{dsaInfo.status}</p>
-                    </div>
-                  </div>
-                  <Button variant="ghost" size="sm">
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
-                </div>
-              </CardHeader>
-
-              {/* Messages */}
-              <ScrollArea className="flex-1 p-4">
-                <div className="space-y-4">
-                  {messages.map((message, index) => {
-                    const showDate = index === 0 || formatDate(message.timestamp) !== formatDate(messages[index - 1].timestamp);
-                    
-                    return (
-                      <div key={message.id}>
-                        {showDate && (
-                          <div className="flex items-center justify-center my-4">
-                            <div className="bg-slate-100 text-slate-600 text-xs px-3 py-1 rounded-full">
-                              {formatDate(message.timestamp)}
-                            </div>
-                          </div>
-                        )}
-                        <div className={`flex ${message.isOwn ? 'justify-end' : 'justify-start'}`}>
-                          <div className={`max-w-xs lg:max-w-md ${message.isOwn ? 'order-2' : 'order-1'}`}>
-                            {!message.isOwn && (
-                              <div className="flex items-center gap-2 mb-1">
-                                <Avatar className="h-6 w-6">
-                                  <AvatarFallback className="bg-blue-600 text-white text-xs">
-                                    {getInitials(message.senderName)}
-                                  </AvatarFallback>
-                                </Avatar>
-                                <span className="text-xs text-slate-500">{message.senderName}</span>
-                              </div>
-                            )}
-                            <div
-                              className={`px-4 py-2 rounded-lg ${
-                                message.isOwn
-                                  ? 'bg-blue-600 text-white'
-                                  : 'bg-slate-100 text-slate-900'
-                              }`}
-                            >
-                              <p className="text-sm">{message.message}</p>
-                            </div>
-                            <div className={`flex items-center gap-1 mt-1 ${message.isOwn ? 'justify-end' : 'justify-start'}`}>
-                              <span className="text-xs text-slate-500">{formatTime(message.timestamp)}</span>
-                              {message.isOwn && (
-                                <CheckCheck className="h-3 w-3 text-blue-600" />
-                              )}
-                            </div>
-                          </div>
+                      
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-medium text-gray-900 truncate">
+                            Application #{chat.applicationId?.slice(-6)}
+                          </p>
+                          {chat.lastMessage && (
+                            <p className="text-xs text-gray-500">
+                              {formatTime(chat.lastMessage.timestamp)}
+                            </p>
+                          )}
                         </div>
+                        
+                        <div className="flex items-center space-x-1 mt-1">
+                          {chat.participants
+                            .filter(p => p.userId !== session.user.id)
+                            .slice(0, 2)
+                            .map((participant, index) => (
+                              <Badge key={index} variant="outline" className="text-xs">
+                                {participant.name}
+                              </Badge>
+                            ))}
+                        </div>
+                        
+                        {chat.lastMessage && (
+                          <p className="text-sm text-gray-600 truncate mt-1">
+                            {chat.lastMessage.senderName}: {chat.lastMessage.message}
+                          </p>
+                        )}
                       </div>
-                    );
-                  })}
-                </div>
-              </ScrollArea>
-
-              {/* Message Input */}
-              <div className="p-4 border-t border-slate-200">
-                <div className="flex items-center gap-2">
-                  <Button variant="ghost" size="sm">
-                    <Paperclip className="h-4 w-4" />
-                  </Button>
-                  <div className="flex-1 relative">
-                    <Input
-                      placeholder="Type your message..."
-                      className="pr-10"
-                    />
-                    <Button variant="ghost" size="sm" className="absolute right-1 top-1/2 transform -translate-y-1/2">
-                      <Smile className="h-4 w-4" />
-                    </Button>
+                    </div>
                   </div>
-                  <Button className="bg-blue-600 hover:bg-blue-700">
-                    <Send className="h-4 w-4" />
-                  </Button>
-                </div>
-                <div className="flex items-center gap-2 mt-2 text-xs text-slate-500">
-                  <Clock className="h-3 w-3" />
-                  <span>DSA typically responds within 30 minutes</span>
-                </div>
+                ))}
               </div>
-            </Card>
-          </div>
+            )}
+          </ScrollArea>
+        </div>
+
+        {/* Chat Window */}
+        <div className="flex-1 flex flex-col">
+          {selectedChat && selectedChatData ? (
+            <ChatWindow
+              chatId={selectedChat}
+              applicationId={selectedChatData.applicationId}
+              participants={selectedChatData.participants}
+            />
+          ) : (
+            <div className="flex-1 flex items-center justify-center bg-gray-50">
+              <div className="text-center">
+                <MessageSquare className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Select a Chat</h3>
+                <p className="text-gray-600 max-w-sm">
+                  Choose a conversation from the sidebar to start messaging with your DSAs
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </DashboardLayout>
+  );
+}
+
+export default function UserChatPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <ChatPageContent />
+    </Suspense>
   );
 }

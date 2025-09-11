@@ -1,5 +1,8 @@
-import { getAuthSession } from '@/lib/auth/utils';
-import { redirect } from 'next/navigation';
+'use client';
+
+import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import { DashboardLayout } from '@/components/layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,222 +11,164 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Search, Plus, FileText, Eye, Download, Upload, CheckCircle, XCircle, Clock, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
+import { useGetApplicationsQuery } from '@/store/api/apiSlice';
+import { SkeletonCard } from '@/components/ui/loading/SkeletonCard';
+import { formatFullCurrency, formatLoanAmount } from '@/lib/utils/currency';
+import { safeApplication } from '@/lib/utils/fallbacks';
 
-export default async function UserApplicationsPage() {
-  const session = await getAuthSession();
-  
-  if (!session?.user || session.user.role !== 'user') {
-    redirect('/login');
+export default function UserApplicationsPage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('newest');
+
+  // Redirect if not authenticated
+  if (status === 'loading') {
+    return <div>Loading...</div>;
   }
 
-  // TODO: Replace with actual API call - filter by user ID
-  const applications = [
-    {
-      id: 'LA202412001',
-      loanAmount: 500000,
-      purpose: 'Masters in Computer Science',
-      institution: 'Stanford University',
-      course: 'MS Computer Science',
-      duration: '2 years',
-      status: 'under_review',
-      submittedAt: '2024-12-10T10:30:00Z',
-      lastUpdated: '2024-12-11T14:20:00Z',
-      dsaName: 'Jane Smith',
-      dsaBank: 'SBI',
-      dsaContact: '+91 9876543210',
-      documents: {
-        required: ['aadhar', 'pan', 'income_proof', 'admission_letter', 'bank_statements', 'collateral_docs'],
-        submitted: ['aadhar', 'pan', 'income_proof', 'admission_letter'],
-        pending: ['bank_statements', 'collateral_docs']
-      },
-      timeline: [
-        { date: '2024-12-10', status: 'submitted', description: 'Application submitted successfully' },
-        { date: '2024-12-10', status: 'assigned', description: 'Assigned to DSA Jane Smith (SBI)' },
-        { date: '2024-12-11', status: 'document_request', description: 'Additional documents requested' }
-      ]
-    },
-    {
-      id: 'LA202411028',
-      loanAmount: 300000,
-      purpose: 'Engineering Degree',
-      institution: 'IIT Delhi',
-      course: 'B.Tech Computer Science',
-      duration: '4 years',
-      status: 'approved',
-      submittedAt: '2024-11-28T09:15:00Z',
-      lastUpdated: '2024-12-02T16:45:00Z',
-      approvedAt: '2024-12-02T16:45:00Z',
-      dsaName: 'Mike Wilson',
-      dsaBank: 'HDFC',
-      dsaContact: '+91 9876543211',
-      loanAccountNumber: 'HDFC789012345',
-      documents: {
-        required: ['aadhar', 'pan', 'income_proof', 'admission_letter', 'bank_statements'],
-        submitted: ['aadhar', 'pan', 'income_proof', 'admission_letter', 'bank_statements'],
-        pending: []
-      },
-      timeline: [
-        { date: '2024-11-28', status: 'submitted', description: 'Application submitted successfully' },
-        { date: '2024-11-29', status: 'assigned', description: 'Assigned to DSA Mike Wilson (HDFC)' },
-        { date: '2024-12-01', status: 'under_review', description: 'Application under review' },
-        { date: '2024-12-02', status: 'approved', description: 'Loan approved - ₹3,00,000' }
-      ]
-    },
-    {
-      id: 'LA202411015',
-      loanAmount: 750000,
-      purpose: 'MBA Program',
-      institution: 'ISB Hyderabad',
-      course: 'MBA',
-      duration: '2 years',
-      status: 'rejected',
-      submittedAt: '2024-11-15T14:20:00Z',
-      lastUpdated: '2024-11-20T11:30:00Z',
-      rejectedAt: '2024-11-20T11:30:00Z',
-      dsaName: 'Sarah Davis',
-      dsaBank: 'ICICI',
-      dsaContact: '+91 9876543212',
-      rejectionReason: 'Insufficient income documentation and collateral requirements not met',
-      documents: {
-        required: ['aadhar', 'pan', 'income_proof', 'admission_letter', 'bank_statements', 'collateral_docs'],
-        submitted: ['aadhar', 'pan', 'admission_letter'],
-        pending: ['income_proof', 'bank_statements', 'collateral_docs']
-      },
-      timeline: [
-        { date: '2024-11-15', status: 'submitted', description: 'Application submitted successfully' },
-        { date: '2024-11-16', status: 'assigned', description: 'Assigned to DSA Sarah Davis (ICICI)' },
-        { date: '2024-11-18', status: 'document_request', description: 'Additional documents requested' },
-        { date: '2024-11-20', status: 'rejected', description: 'Application rejected - Insufficient documentation' }
-      ]
-    }
-  ];
+  if (!session?.user || session.user.role !== 'user') {
+    router.push('/login');
+    return null;
+  }
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'approved':
-        return 'bg-green-100 text-green-800';
-      case 'rejected':
-        return 'bg-red-100 text-red-800';
-      case 'under_review':
-        return 'bg-blue-100 text-blue-800';
-      case 'pending':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'document_pending':
-        return 'bg-orange-100 text-orange-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
+  // Fetch applications using RTK Query
+  const { 
+    data: applicationsData, 
+    isLoading, 
+    error,
+    refetch 
+  } = useGetApplicationsQuery({
+    userId: session.user.id,
+    status: statusFilter !== 'all' ? statusFilter : undefined,
+    search: searchTerm || undefined,
+    sortBy,
+  });
+
+  const applications = applicationsData?.applications || [];
 
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'approved':
-        return <CheckCircle className="h-4 w-4 text-green-600" />;
+        return <CheckCircle className="h-4 w-4 text-green-500" />;
       case 'rejected':
-        return <XCircle className="h-4 w-4 text-red-600" />;
+        return <XCircle className="h-4 w-4 text-red-500" />;
       case 'under_review':
-        return <Eye className="h-4 w-4 text-blue-600" />;
+        return <Clock className="h-4 w-4 text-yellow-500" />;
+      case 'partially_approved':
+        return <AlertCircle className="h-4 w-4 text-blue-500" />;
       case 'pending':
-        return <Clock className="h-4 w-4 text-yellow-600" />;
-      case 'document_pending':
-        return <AlertCircle className="h-4 w-4 text-orange-600" />;
+        return <Clock className="h-4 w-4 text-gray-500" />;
       default:
-        return <FileText className="h-4 w-4 text-gray-600" />;
+        return <FileText className="h-4 w-4 text-gray-400" />;
     }
   };
 
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'approved':
+        return 'bg-green-100 text-green-800 border-green-200';
+      case 'rejected':
+        return 'bg-red-100 text-red-800 border-red-200';
+      case 'under_review':
+        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'partially_approved':
+        return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'pending':
+        return 'bg-gray-100 text-gray-800 border-gray-200';
+      default:
+        return 'bg-gray-100 text-gray-600 border-gray-200';
+    }
+  };
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'approved':
+        return 'Approved';
+      case 'rejected':
+        return 'Rejected';
+      case 'under_review':
+        return 'Under Review';
+      case 'partially_approved':
+        return 'Partially Approved';
+      case 'pending':
+        return 'Pending';
+      default:
+        return 'Unknown';
+    }
+  };
+
+  if (error) {
+    return (
+      <DashboardLayout>
+        <div className="p-6">
+          <div className="text-center py-12">
+            <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Error Loading Applications</h3>
+            <p className="text-gray-600 mb-4">Failed to load your applications. Please try again.</p>
+            <Button onClick={() => refetch()}>Retry</Button>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   return (
     <DashboardLayout>
-      <div className="space-y-6 lg:space-y-8">
+      <div className="p-6 space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">My Applications</h1>
-            <p className="text-slate-600">Track and manage your education loan applications</p>
+            <h1 className="text-2xl font-bold text-gray-900">My Applications</h1>
+            <p className="text-gray-600">Track and manage your loan applications</p>
           </div>
           <Link href="/user/applications/new">
-            <Button className="bg-blue-600 hover:bg-blue-700">
-              <Plus className="h-4 w-4 mr-2" />
+            <Button className="flex items-center gap-2">
+              <Plus className="h-4 w-4" />
               New Application
             </Button>
           </Link>
         </div>
 
-        {/* Quick Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
-          <Card className="bg-white border border-slate-200">
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-slate-600">Total Applications</p>
-                  <p className="text-2xl font-bold text-slate-900">{applications.length}</p>
-                </div>
-                <FileText className="h-5 w-5 text-blue-600" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="bg-white border border-slate-200">
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-slate-600">Under Review</p>
-                  <p className="text-2xl font-bold text-slate-900">
-                    {applications.filter(app => app.status === 'under_review').length}
-                  </p>
-                </div>
-                <Eye className="h-5 w-5 text-blue-600" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="bg-white border border-slate-200">
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-slate-600">Approved</p>
-                  <p className="text-2xl font-bold text-slate-900">
-                    {applications.filter(app => app.status === 'approved').length}
-                  </p>
-                </div>
-                <CheckCircle className="h-5 w-5 text-green-600" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="bg-white border border-slate-200">
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-slate-600">Total Amount</p>
-                  <p className="text-2xl font-bold text-slate-900">
-                    ₹{(applications.reduce((sum, app) => sum + app.loanAmount, 0) / 100000).toFixed(1)}L
-                  </p>
-                </div>
-                <FileText className="h-5 w-5 text-purple-600" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
         {/* Filters */}
-        <Card className="bg-white border border-slate-200">
-          <CardContent className="p-4 sm:p-6">
+        <Card>
+          <CardContent className="p-4">
             <div className="flex flex-col sm:flex-row gap-4">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <Input
-                  placeholder="Search applications..."
-                  className="pl-10"
-                />
+              <div className="flex-1">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                  <Input
+                    placeholder="Search applications..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
               </div>
-              <Select>
-                <SelectTrigger className="w-full sm:w-40">
-                  <SelectValue placeholder="Status" />
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-full sm:w-48">
+                  <SelectValue placeholder="Filter by status" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Status</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
                   <SelectItem value="under_review">Under Review</SelectItem>
+                  <SelectItem value="partially_approved">Partially Approved</SelectItem>
                   <SelectItem value="approved">Approved</SelectItem>
                   <SelectItem value="rejected">Rejected</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={sortBy} onValueChange={setSortBy}>
+                <SelectTrigger className="w-full sm:w-48">
+                  <SelectValue placeholder="Sort by" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="newest">Newest First</SelectItem>
+                  <SelectItem value="oldest">Oldest First</SelectItem>
+                  <SelectItem value="amount_high">Amount: High to Low</SelectItem>
+                  <SelectItem value="amount_low">Amount: Low to High</SelectItem>
+                  <SelectItem value="status">Status</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -231,116 +176,161 @@ export default async function UserApplicationsPage() {
         </Card>
 
         {/* Applications List */}
-        <div className="grid grid-cols-1 gap-4 lg:gap-6">
-          {applications.map((app) => (
-            <Card key={app.id} className="bg-white border border-slate-200 hover:shadow-md transition-all">
-              <CardContent className="p-4 sm:p-6">
-                <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-                  <div className="flex-1 space-y-4">
+        {isLoading ? (
+          <div className="grid gap-6">
+            {[...Array(3)].map((_, i) => (
+              <SkeletonCard key={i} />
+            ))}
+          </div>
+        ) : applications.length === 0 ? (
+          <Card>
+            <CardContent className="text-center py-12">
+              <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">No Applications Found</h3>
+              <p className="text-gray-600 mb-4">
+                {searchTerm || statusFilter !== 'all' 
+                  ? 'No applications match your current filters.' 
+                  : 'You haven\'t submitted any loan applications yet.'
+                }
+              </p>
+              {!searchTerm && statusFilter === 'all' && (
+                <Link href="/user/applications/new">
+                  <Button>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Your First Application
+                  </Button>
+                </Link>
+              )}
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-6">
+            {applications.map((app) => {
+              const safeApp = safeApplication(app);
+              return (
+                <Card key={safeApp._id} className="hover:shadow-md transition-shadow">
+                  <CardHeader className="pb-3">
                     <div className="flex items-start justify-between">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-semibold text-slate-900">{app.id}</h3>
-                          {getStatusIcon(app.status)}
-                          <Badge className={getStatusColor(app.status)}>
-                            {app.status.replace('_', ' ')}
-                          </Badge>
+                      <div className="space-y-1">
+                        <CardTitle className="text-lg">
+                          Application #{safeApp.applicationId}
+                        </CardTitle>
+                        <CardDescription>
+                          {safeApp.educationInfo.course} at {safeApp.educationInfo.instituteName}
+                        </CardDescription>
+                      </div>
+                      <Badge className={`${getStatusColor(safeApp.status)} border`}>
+                        <div className="flex items-center gap-1">
+                          {getStatusIcon(safeApp.status)}
+                          {getStatusText(safeApp.status)}
                         </div>
-                        <p className="text-sm text-slate-500">
-                          Submitted {new Date(app.submittedAt).toLocaleDateString()}
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <p className="text-sm font-medium text-gray-500">Loan Amount</p>
+                        <p className="text-lg font-semibold text-gray-900">
+                          {formatLoanAmount(safeApp.loanInfo.amount)}
                         </p>
                       </div>
-                      <div className="text-right">
-                        <p className="font-semibold text-slate-900">₹{(app.loanAmount / 100000).toFixed(1)}L</p>
-                        <p className="text-sm text-slate-500">{app.duration}</p>
+                      <div>
+                        <p className="text-sm font-medium text-gray-500">Submitted</p>
+                        <p className="text-sm text-gray-900">
+                          {new Date(safeApp.createdAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-500">Last Updated</p>
+                        <p className="text-sm text-gray-900">
+                          {new Date(safeApp.updatedAt).toLocaleDateString()}
+                        </p>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-sm font-medium text-slate-700">Institution</p>
-                        <p className="text-sm text-slate-900">{app.institution}</p>
-                        <p className="text-xs text-slate-500">{app.course}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-slate-700">DSA Assigned</p>
-                        <p className="text-sm text-slate-900">{app.dsaName}</p>
-                        <p className="text-xs text-slate-500">{app.dsaBank} Bank</p>
-                      </div>
-                    </div>
-
-                    {/* Document Status */}
-                    <div>
-                      <p className="text-sm font-medium text-slate-700 mb-2">Document Status</p>
-                      <div className="flex items-center gap-4">
-                        <div className="text-sm">
-                          <span className="text-green-600 font-medium">{app.documents.submitted.length} submitted</span>
+                    {/* DSA Information */}
+                    {safeApp.assignedDSAs && safeApp.assignedDSAs.length > 0 && (
+                      <div className="border-t pt-4">
+                        <p className="text-sm font-medium text-gray-500 mb-2">Assigned DSAs</p>
+                        <div className="flex flex-wrap gap-2">
+                          {safeApp.assignedDSAs.map((dsa: any, index: number) => (
+                            <Badge key={index} variant="outline" className="text-xs">
+                              {dsa.name} ({dsa.bankName})
+                            </Badge>
+                          ))}
                         </div>
-                        {app.documents.pending.length > 0 && (
-                          <div className="text-sm">
-                            <span className="text-orange-600 font-medium">{app.documents.pending.length} pending</span>
-                          </div>
+                      </div>
+                    )}
+
+                    {/* Action Buttons */}
+                    <div className="flex items-center justify-between pt-4 border-t">
+                      <div className="flex items-center gap-2">
+                        <Link href={`/user/applications/${safeApp._id}`}>
+                          <Button variant="outline" size="sm">
+                            <Eye className="h-4 w-4 mr-2" />
+                            View Details
+                          </Button>
+                        </Link>
+                        {safeApp.status === 'partially_approved' && (
+                          <Link href={`/user/chat?applicationId=${safeApp._id}`}>
+                            <Button variant="outline" size="sm">
+                              <FileText className="h-4 w-4 mr-2" />
+                              Chat with DSA
+                            </Button>
+                          </Link>
                         )}
-                        <div className="text-sm text-slate-500">
-                          of {app.documents.required.length} required
-                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {safeApp.documents && (
+                          <Button variant="ghost" size="sm">
+                            <Download className="h-4 w-4 mr-2" />
+                            Documents ({safeApp.documents.length})
+                          </Button>
+                        )}
                       </div>
                     </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
 
-                    {/* Special Messages */}
-                    {app.status === 'approved' && app.loanAccountNumber && (
-                      <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                        <p className="text-sm text-green-800">
-                          <CheckCircle className="h-4 w-4 inline mr-1" />
-                          Loan approved! Account Number: <strong>{app.loanAccountNumber}</strong>
-                        </p>
-                      </div>
-                    )}
-
-                    {app.status === 'rejected' && app.rejectionReason && (
-                      <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                        <p className="text-sm text-red-800">
-                          <XCircle className="h-4 w-4 inline mr-1" />
-                          Rejection Reason: {app.rejectionReason}
-                        </p>
-                      </div>
-                    )}
-
-                    {app.documents.pending.length > 0 && (
-                      <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
-                        <p className="text-sm text-orange-800">
-                          <AlertCircle className="h-4 w-4 inline mr-1" />
-                          Please upload pending documents: {app.documents.pending.join(', ')}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <Link href={`/user/applications/${app.id}`}>
-                      <Button variant="outline" size="sm" className="w-full sm:w-auto">
-                        <Eye className="h-4 w-4 mr-2" />
-                        View Details
-                      </Button>
-                    </Link>
-                    {app.documents.pending.length > 0 && (
-                      <Button size="sm" className="w-full sm:w-auto bg-orange-600 hover:bg-orange-700">
-                        <Upload className="h-4 w-4 mr-2" />
-                        Upload Docs
-                      </Button>
-                    )}
-                    {app.status === 'approved' && (
-                      <Button variant="outline" size="sm" className="w-full sm:w-auto">
-                        <Download className="h-4 w-4 mr-2" />
-                        Download
-                      </Button>
-                    )}
-                  </div>
+        {/* Summary Stats */}
+        {applications.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Application Summary</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-gray-900">{applications.length}</p>
+                  <p className="text-sm text-gray-600">Total Applications</p>
                 </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-green-600">
+                    {applications.filter(app => app.status === 'approved').length}
+                  </p>
+                  <p className="text-sm text-gray-600">Approved</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-yellow-600">
+                    {applications.filter(app => ['under_review', 'partially_approved'].includes(app.status)).length}
+                  </p>
+                  <p className="text-sm text-gray-600">In Progress</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-blue-600">
+                    {formatLoanAmount(applications.reduce((sum, app) => sum + (app.loanInfo?.amount || 0), 0))}
+                  </p>
+                  <p className="text-sm text-gray-600">Total Amount</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </DashboardLayout>
   );

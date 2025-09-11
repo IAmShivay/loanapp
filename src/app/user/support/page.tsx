@@ -1,5 +1,8 @@
-import { getAuthSession } from '@/lib/auth/utils';
-import { redirect } from 'next/navigation';
+'use client';
+
+import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,50 +12,93 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { 
-  HelpCircle, 
-  MessageSquare, 
-  Phone, 
-  Mail, 
-  FileText, 
-  Clock, 
+import {
+  HelpCircle,
+  MessageSquare,
+  Phone,
+  Mail,
+  FileText,
+  Clock,
   CheckCircle,
   AlertCircle,
   Search,
   Plus,
   ExternalLink
 } from 'lucide-react';
+import {
+  useGetSupportTicketsQuery,
+  useCreateSupportTicketMutation,
+  useAddSupportTicketMessageMutation
+} from '@/store/api/apiSlice';
+import LoadingSpinner from '@/components/common/LoadingSpinner';
+import { safeString, safeDate, safeTimeAgo } from '@/lib/utils/fallbacks';
+import { toast } from 'sonner';
 
-export default async function UserSupportPage() {
-  const session = await getAuthSession();
-  
-  if (!session?.user || session.user.role !== 'user') {
-    redirect('/login');
+export default function UserSupportPage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+
+  if (status === 'loading') {
+    return <LoadingSpinner />;
   }
 
-  // TODO: Replace with actual API calls
-  const supportTickets = [
-    {
-      id: 'TKT-001',
-      subject: 'Document upload issue',
-      category: 'Technical',
-      status: 'open',
-      priority: 'medium',
-      createdAt: '2024-12-10T10:00:00Z',
-      lastUpdated: '2024-12-11T14:30:00Z',
-      description: 'Unable to upload bank statements. Getting error message.'
-    },
-    {
-      id: 'TKT-002',
-      subject: 'Application status inquiry',
-      category: 'General',
-      status: 'resolved',
-      priority: 'low',
-      createdAt: '2024-12-08T09:15:00Z',
-      lastUpdated: '2024-12-09T16:45:00Z',
-      description: 'Need clarification on current application status.'
+  if (!session?.user || session.user.role !== 'user') {
+    router.push('/login');
+    return null;
+  }
+
+  const [statusFilter, setStatusFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [newTicket, setNewTicket] = useState({
+    subject: '',
+    description: '',
+    category: 'general' as const,
+    priority: 'medium' as const
+  });
+
+  // RTK Query hooks
+  const {
+    data: ticketsData,
+    isLoading: ticketsLoading,
+    error: ticketsError,
+    refetch: refetchTickets
+  } = useGetSupportTicketsQuery({
+    status: statusFilter || undefined,
+    category: categoryFilter || undefined,
+    limit: 20,
+    page: 1
+  });
+
+  const [createTicket, { isLoading: createLoading }] = useCreateSupportTicketMutation();
+  const [addMessage] = useAddSupportTicketMessageMutation();
+
+  const supportTickets = ticketsData?.tickets || [];
+
+  const handleCreateTicket = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!newTicket.subject.trim() || !newTicket.description.trim()) {
+      toast.error('Please fill in all required fields');
+      return;
     }
-  ];
+
+    try {
+      await createTicket(newTicket).unwrap();
+      toast.success('Support ticket created successfully');
+      setShowCreateForm(false);
+      setNewTicket({
+        subject: '',
+        description: '',
+        category: 'general',
+        priority: 'medium'
+      });
+      refetchTickets();
+    } catch (error) {
+      toast.error('Failed to create support ticket');
+      console.error('Error creating ticket:', error);
+    }
+  };
 
   const faqItems = [
     {
@@ -108,6 +154,14 @@ export default async function UserSupportPage() {
         return 'bg-gray-100 text-gray-800';
     }
   };
+
+  if (ticketsLoading) {
+    return (
+      <DashboardLayout>
+        <LoadingSpinner />
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -194,53 +248,75 @@ export default async function UserSupportPage() {
                   Can&apos;t find what you&apos;re looking for? Create a support ticket and we&apos;ll help you out.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="category">Category</Label>
-                    <Select>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select category" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="technical">Technical Issue</SelectItem>
-                        <SelectItem value="application">Application Help</SelectItem>
-                        <SelectItem value="documents">Document Related</SelectItem>
-                        <SelectItem value="payment">Payment & EMI</SelectItem>
-                        <SelectItem value="general">General Inquiry</SelectItem>
-                      </SelectContent>
-                    </Select>
+              <CardContent>
+                <form onSubmit={handleCreateTicket} className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="category">Category</Label>
+                      <Select
+                        value={newTicket.category}
+                        onValueChange={(value: any) => setNewTicket(prev => ({ ...prev, category: value }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="technical">Technical Issue</SelectItem>
+                          <SelectItem value="general">General Inquiry</SelectItem>
+                          <SelectItem value="billing">Billing & Payment</SelectItem>
+                          <SelectItem value="process">Process Related</SelectItem>
+                          <SelectItem value="other">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="priority">Priority</Label>
+                      <Select
+                        value={newTicket.priority}
+                        onValueChange={(value: any) => setNewTicket(prev => ({ ...prev, priority: value }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select priority" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="low">Low</SelectItem>
+                          <SelectItem value="medium">Medium</SelectItem>
+                          <SelectItem value="high">High</SelectItem>
+                          <SelectItem value="urgent">Urgent</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                   <div>
-                    <Label htmlFor="priority">Priority</Label>
-                    <Select>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select priority" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="low">Low</SelectItem>
-                        <SelectItem value="medium">Medium</SelectItem>
-                        <SelectItem value="high">High</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Label htmlFor="subject">Subject</Label>
+                    <Input
+                      id="subject"
+                      placeholder="Brief description of your issue"
+                      value={newTicket.subject}
+                      onChange={(e) => setNewTicket(prev => ({ ...prev, subject: e.target.value }))}
+                      required
+                    />
                   </div>
-                </div>
-                <div>
-                  <Label htmlFor="subject">Subject</Label>
-                  <Input id="subject" placeholder="Brief description of your issue" />
-                </div>
-                <div>
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea 
-                    id="description" 
-                    placeholder="Please provide detailed information about your issue..."
-                    rows={4}
-                  />
-                </div>
-                <Button className="bg-blue-600 hover:bg-blue-700">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create Ticket
-                </Button>
+                  <div>
+                    <Label htmlFor="description">Description</Label>
+                    <Textarea
+                      id="description"
+                      placeholder="Please provide detailed information about your issue..."
+                      rows={4}
+                      value={newTicket.description}
+                      onChange={(e) => setNewTicket(prev => ({ ...prev, description: e.target.value }))}
+                      required
+                    />
+                  </div>
+                  <Button
+                    type="submit"
+                    className="bg-blue-600 hover:bg-blue-700"
+                    disabled={createLoading}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    {createLoading ? 'Creating...' : 'Create Ticket'}
+                  </Button>
+                </form>
               </CardContent>
             </Card>
 
@@ -254,6 +330,39 @@ export default async function UserSupportPage() {
                 <CardDescription>Track your support requests</CardDescription>
               </CardHeader>
               <CardContent>
+                {/* Filters */}
+                <div className="flex flex-col sm:flex-row gap-4 mb-6">
+                  <div className="flex-1">
+                    <Select value={statusFilter} onValueChange={setStatusFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Filter by status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">All Status</SelectItem>
+                        <SelectItem value="open">Open</SelectItem>
+                        <SelectItem value="in_progress">In Progress</SelectItem>
+                        <SelectItem value="resolved">Resolved</SelectItem>
+                        <SelectItem value="closed">Closed</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex-1">
+                    <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Filter by category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">All Categories</SelectItem>
+                        <SelectItem value="technical">Technical</SelectItem>
+                        <SelectItem value="general">General</SelectItem>
+                        <SelectItem value="billing">Billing</SelectItem>
+                        <SelectItem value="process">Process</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
                 {supportTickets.length === 0 ? (
                   <div className="text-center py-8">
                     <FileText className="h-12 w-12 text-slate-300 mx-auto mb-4" />
@@ -263,11 +372,11 @@ export default async function UserSupportPage() {
                 ) : (
                   <div className="space-y-4">
                     {supportTickets.map((ticket) => (
-                      <div key={ticket.id} className="border border-slate-200 rounded-lg p-4">
+                      <div key={ticket._id} className="border border-slate-200 rounded-lg p-4">
                         <div className="flex items-start justify-between mb-3">
                           <div>
                             <div className="flex items-center gap-2 mb-1">
-                              <h3 className="font-semibold text-slate-900">{ticket.subject}</h3>
+                              <h3 className="font-semibold text-slate-900">{safeString(ticket.subject)}</h3>
                               <Badge className={getStatusColor(ticket.status)} >
                                 {ticket.status.replace('_', ' ')}
                               </Badge>
@@ -275,14 +384,20 @@ export default async function UserSupportPage() {
                                 {ticket.priority}
                               </Badge>
                             </div>
-                            <p className="text-sm text-slate-600 mb-2">{ticket.description}</p>
+                            <p className="text-sm text-slate-600 mb-2">{safeString(ticket.description)}</p>
                             <div className="flex items-center gap-4 text-xs text-slate-500">
-                              <span>#{ticket.id}</span>
+                              <span>#{safeString(ticket.ticketNumber)}</span>
                               <span className="flex items-center gap-1">
                                 <Clock className="h-3 w-3" />
-                                Created {new Date(ticket.createdAt).toLocaleDateString()}
+                                Created {safeDate(ticket.createdAt)}
                               </span>
-                              <span>Updated {new Date(ticket.lastUpdated).toLocaleDateString()}</span>
+                              <span>Updated {safeTimeAgo(ticket.updatedAt)}</span>
+                              {ticket.messages && ticket.messages.length > 0 && (
+                                <span className="flex items-center gap-1">
+                                  <MessageSquare className="h-3 w-3" />
+                                  {ticket.messages.length} messages
+                                </span>
+                              )}
                             </div>
                           </div>
                           <Button variant="outline" >

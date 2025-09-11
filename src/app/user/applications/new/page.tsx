@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { DashboardLayout } from '@/components/layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,82 +12,114 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
-import { ArrowLeft, ArrowRight, Save, Send, Upload, FileText, AlertCircle, CheckCircle, CreditCard, Shield, Clock } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
-import { z } from 'zod';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { ArrowLeft, ArrowRight, Save, Send, Upload, FileText, AlertCircle, CheckCircle, CreditCard, Shield, Clock, User, GraduationCap, DollarSign, Users } from 'lucide-react';
+import { toast } from 'sonner';
+import { formatFullCurrency, formatLoanAmount } from '@/lib/utils/currency';
+import FileUpload from '@/components/common/FileUpload';
+import { useCreateApplicationMutation } from '@/store/api/apiSlice';
 
-// Form validation schema
-const applicationSchema = z.object({
+interface FormData {
   // Personal Information
-  firstName: z.string().min(2, 'First name must be at least 2 characters'),
-  lastName: z.string().min(2, 'Last name must be at least 2 characters'),
-  email: z.string().email('Invalid email address'),
-  phone: z.string().min(10, 'Phone number must be at least 10 digits'),
-  dateOfBirth: z.string().min(1, 'Date of birth is required'),
-  aadharNumber: z.string().length(12, 'Aadhar number must be 12 digits'),
-  panNumber: z.string().length(10, 'PAN number must be 10 characters'),
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  dateOfBirth: string;
+  aadharNumber: string;
+  panNumber: string;
   
   // Address Information
-  address: z.string().min(10, 'Address must be at least 10 characters'),
-  city: z.string().min(2, 'City is required'),
-  state: z.string().min(2, 'State is required'),
-  pincode: z.string().length(6, 'Pincode must be 6 digits'),
+  address: string;
+  city: string;
+  state: string;
+  pincode: string;
   
   // Education Information
-  institution: z.string().min(2, 'Institution name is required'),
-  course: z.string().min(2, 'Course name is required'),
-  duration: z.string().min(1, 'Course duration is required'),
-  admissionDate: z.string().min(1, 'Admission date is required'),
-  feeStructure: z.number().min(1000, 'Fee structure must be at least ₹1,000'),
+  institution: string;
+  course: string;
+  duration: string;
+  admissionDate: string;
+  feeStructure: number;
   
   // Loan Information
-  loanAmount: z.number().min(50000, 'Loan amount must be at least ₹50,000').max(5000000, 'Loan amount cannot exceed ₹50,00,000'),
-  purpose: z.string().min(10, 'Purpose must be at least 10 characters'),
+  loanAmount: number;
+  purpose: string;
   
   // Financial Information
-  annualIncome: z.number().min(100000, 'Annual income must be at least ₹1,00,000'),
-  employmentType: z.string().min(1, 'Employment type is required'),
-  employerName: z.string().min(2, 'Employer name is required'),
+  annualIncome: number;
+  employmentType: string;
+  employerName: string;
+  workExperience: string;
   
   // Co-applicant Information (optional)
-  hasCoApplicant: z.boolean(),
-  coApplicantName: z.string().optional(),
-  coApplicantRelation: z.string().optional(),
-  coApplicantIncome: z.number().optional(),
+  hasCoApplicant: boolean;
+  coApplicantName: string;
+  coApplicantRelation: string;
+  coApplicantIncome: number;
   
-  // Terms and Conditions
-  agreeToTerms: z.boolean().refine(val => val === true, 'You must agree to terms and conditions'),
-  agreeToDataProcessing: z.boolean().refine(val => val === true, 'You must agree to data processing')
-});
+  // Terms and conditions
+  agreeToTerms: boolean;
+  agreeToProcessing: boolean;
+}
 
-type FormData = z.infer<typeof applicationSchema>;
+const initialFormData: FormData = {
+  firstName: '',
+  lastName: '',
+  email: '',
+  phone: '',
+  dateOfBirth: '',
+  aadharNumber: '',
+  panNumber: '',
+  address: '',
+  city: '',
+  state: '',
+  pincode: '',
+  institution: '',
+  course: '',
+  duration: '',
+  admissionDate: '',
+  feeStructure: 0,
+  loanAmount: 0,
+  purpose: '',
+  annualIncome: 0,
+  employmentType: '',
+  employerName: '',
+  workExperience: '',
+  hasCoApplicant: false,
+  coApplicantName: '',
+  coApplicantRelation: '',
+  coApplicantIncome: 0,
+  agreeToTerms: false,
+  agreeToProcessing: false,
+};
 
-export default function NewApplicationPage() {
+const steps = [
+  { id: 1, title: 'Personal Info', icon: User, description: 'Basic personal details' },
+  { id: 2, title: 'Education', icon: GraduationCap, description: 'Educational information' },
+  { id: 3, title: 'Financial', icon: DollarSign, description: 'Financial details' },
+  { id: 4, title: 'Documents', icon: FileText, description: 'Upload documents' },
+  { id: 5, title: 'Review', icon: CheckCircle, description: 'Review and submit' },
+];
+
+export default function NewLoanApplication() {
+  const { data: session } = useSession();
   const router = useRouter();
-  const { toast } = useToast();
   const [currentStep, setCurrentStep] = useState(1);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formData, setFormData] = useState<Partial<FormData>>({
-    hasCoApplicant: false,
-    agreeToTerms: false,
-    agreeToDataProcessing: false
-  });
+  const [formData, setFormData] = useState<FormData>(initialFormData);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [uploadedFiles, setUploadedFiles] = useState<Record<string, any[]>>({});
+  
+  const [createApplication, { isLoading: isSubmitting }] = useCreateApplicationMutation();
 
-  const totalSteps = 7;
-  const progress = (currentStep / totalSteps) * 100;
+  // Redirect if not authenticated
+  if (!session) {
+    router.push('/login');
+    return null;
+  }
 
-  const stepTitles = [
-    'Personal Information',
-    'Address Details',
-    'Education Information',
-    'Loan Details',
-    'Financial Information',
-    'Payment Information',
-    'Review & Submit'
-  ];
-
-  const handleInputChange = (field: keyof FormData, value: unknown) => {
+  const updateFormData = (field: keyof FormData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     // Clear error when user starts typing
     if (errors[field]) {
@@ -95,215 +128,286 @@ export default function NewApplicationPage() {
   };
 
   const validateStep = (step: number): boolean => {
-    const stepErrors: Record<string, string> = {};
-    
+    const newErrors: Record<string, string> = {};
+
     switch (step) {
-      case 1: // Personal Information
-        if (!formData.firstName) stepErrors.firstName = 'First name is required';
-        if (!formData.lastName) stepErrors.lastName = 'Last name is required';
-        if (!formData.email) stepErrors.email = 'Email is required';
-        if (!formData.phone) stepErrors.phone = 'Phone number is required';
-        if (!formData.dateOfBirth) stepErrors.dateOfBirth = 'Date of birth is required';
-        if (!formData.aadharNumber) stepErrors.aadharNumber = 'Aadhar number is required';
-        if (!formData.panNumber) stepErrors.panNumber = 'PAN number is required';
+      case 1: // Personal Info
+        if (!formData.firstName.trim()) newErrors.firstName = 'First name is required';
+        if (!formData.lastName.trim()) newErrors.lastName = 'Last name is required';
+        if (!formData.email.trim()) newErrors.email = 'Email is required';
+        if (!formData.phone.trim()) newErrors.phone = 'Phone is required';
+        if (!formData.dateOfBirth) newErrors.dateOfBirth = 'Date of birth is required';
+        if (!formData.aadharNumber.trim()) newErrors.aadharNumber = 'Aadhar number is required';
+        if (!formData.panNumber.trim()) newErrors.panNumber = 'PAN number is required';
+        if (!formData.address.trim()) newErrors.address = 'Address is required';
+        if (!formData.city.trim()) newErrors.city = 'City is required';
+        if (!formData.state.trim()) newErrors.state = 'State is required';
+        if (!formData.pincode.trim()) newErrors.pincode = 'Pincode is required';
         break;
-      case 2: // Address
-        if (!formData.address) stepErrors.address = 'Address is required';
-        if (!formData.city) stepErrors.city = 'City is required';
-        if (!formData.state) stepErrors.state = 'State is required';
-        if (!formData.pincode) stepErrors.pincode = 'Pincode is required';
+
+      case 2: // Education
+        if (!formData.institution.trim()) newErrors.institution = 'Institution is required';
+        if (!formData.course.trim()) newErrors.course = 'Course is required';
+        if (!formData.duration.trim()) newErrors.duration = 'Duration is required';
+        if (!formData.admissionDate) newErrors.admissionDate = 'Admission date is required';
+        if (!formData.feeStructure || formData.feeStructure < 1000) newErrors.feeStructure = 'Fee structure must be at least ₹1,000';
         break;
-      case 3: // Education
-        if (!formData.institution) stepErrors.institution = 'Institution is required';
-        if (!formData.course) stepErrors.course = 'Course is required';
-        if (!formData.duration) stepErrors.duration = 'Duration is required';
-        if (!formData.admissionDate) stepErrors.admissionDate = 'Admission date is required';
-        if (!formData.feeStructure) stepErrors.feeStructure = 'Fee structure is required';
+
+      case 3: // Financial
+        if (!formData.loanAmount || formData.loanAmount < 50000) newErrors.loanAmount = 'Loan amount must be at least ₹50,000';
+        if (formData.loanAmount > 5000000) newErrors.loanAmount = 'Loan amount cannot exceed ₹50,00,000';
+        if (!formData.purpose.trim()) newErrors.purpose = 'Purpose is required';
+        if (!formData.annualIncome || formData.annualIncome < 100000) newErrors.annualIncome = 'Annual income must be at least ₹1,00,000';
+        if (!formData.employmentType.trim()) newErrors.employmentType = 'Employment type is required';
+        if (!formData.employerName.trim()) newErrors.employerName = 'Employer name is required';
+        if (!formData.workExperience.trim()) newErrors.workExperience = 'Work experience is required';
         break;
-      case 4: // Loan Details
-        if (!formData.loanAmount) stepErrors.loanAmount = 'Loan amount is required';
-        if (!formData.purpose) stepErrors.purpose = 'Purpose is required';
+
+      case 4: // Documents
+        const requiredDocs = ['aadhar_card', 'pan_card', 'income_certificate', 'bank_statement', 'admission_letter', 'fee_structure'];
+        for (const doc of requiredDocs) {
+          if (!uploadedFiles[doc] || uploadedFiles[doc].length === 0) {
+            newErrors[doc] = `${doc.replace('_', ' ')} is required`;
+          }
+        }
         break;
-      case 5: // Financial Information
-        if (!formData.annualIncome) stepErrors.annualIncome = 'Annual income is required';
-        if (!formData.employmentType) stepErrors.employmentType = 'Employment type is required';
-        if (!formData.employerName) stepErrors.employerName = 'Employer name is required';
-        break;
-      case 6: // Payment Information
-        // Payment step validation (if needed)
+
+      case 5: // Review
+        if (!formData.agreeToTerms) newErrors.agreeToTerms = 'You must agree to terms and conditions';
+        if (!formData.agreeToProcessing) newErrors.agreeToProcessing = 'You must agree to data processing';
         break;
     }
 
-    setErrors(stepErrors);
-    return Object.keys(stepErrors).length === 0;
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
-  const handleNext = () => {
+  const nextStep = () => {
     if (validateStep(currentStep)) {
-      setCurrentStep(prev => Math.min(prev + 1, totalSteps));
+      setCurrentStep(prev => Math.min(prev + 1, steps.length));
     }
   };
 
-  const handlePrevious = () => {
+  const prevStep = () => {
     setCurrentStep(prev => Math.max(prev - 1, 1));
   };
 
   const handleSubmit = async () => {
-    if (!validateStep(currentStep)) return;
+    if (!validateStep(5)) return;
 
     try {
-      setIsSubmitting(true);
-
-      // Validate entire form
-      const validatedData = applicationSchema.parse(formData);
-
-      // Step 1: Create application
-      const applicationResponse = await fetch('/api/applications', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      const applicationData = {
+        personalInfo: {
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          email: formData.email,
+          phone: formData.phone,
+          dateOfBirth: formData.dateOfBirth,
+          aadharNumber: formData.aadharNumber,
+          panNumber: formData.panNumber,
+          address: {
+            street: formData.address,
+            city: formData.city,
+            state: formData.state,
+            pincode: formData.pincode,
+          },
         },
-        body: JSON.stringify(validatedData),
-      });
-
-      if (!applicationResponse.ok) {
-        throw new Error('Failed to submit application');
-      }
-
-      const applicationResult = await applicationResponse.json();
-
-      // Step 2: Initiate payment for service charge
-      const paymentResponse = await fetch('/api/payments/initiate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+        educationInfo: {
+          instituteName: formData.institution,
+          course: formData.course,
+          duration: formData.duration,
+          admissionDate: formData.admissionDate,
+          feeStructure: formData.feeStructure,
         },
-        body: JSON.stringify({
-          applicationId: applicationResult.applicationId,
-          amount: 99,
-          currency: 'INR',
-          paymentMethod: 'card', // Default, user can change on payment page
-          returnUrl: `${window.location.origin}/user/applications`
-        }),
-      });
+        loanInfo: {
+          amount: formData.loanAmount,
+          purpose: formData.purpose,
+        },
+        financialInfo: {
+          annualIncome: formData.annualIncome,
+          employmentType: formData.employmentType,
+          employerName: formData.employerName,
+          workExperience: formData.workExperience,
+        },
+        coApplicant: formData.hasCoApplicant ? {
+          name: formData.coApplicantName,
+          relation: formData.coApplicantRelation,
+          annualIncome: formData.coApplicantIncome,
+        } : undefined,
+        documents: uploadedFiles,
+      };
 
-      if (!paymentResponse.ok) {
-        throw new Error('Failed to initiate payment');
-      }
-
-      const paymentResult = await paymentResponse.json();
-
-      toast({
-        title: "Application Created Successfully!",
-        description: `Application ID: ${applicationResult.applicationId}. Redirecting to payment...`,
-      });
-
-      // Redirect to payment page
-      router.push(paymentResult.payment.paymentUrl);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        const fieldErrors: Record<string, string> = {};
-        error.issues.forEach(err => {
-          if (err.path[0]) {
-            fieldErrors[err.path[0] as string] = err.message;
-          }
-        });
-        setErrors(fieldErrors);
-      } else {
-        toast({
-          title: "Submission Failed",
-          description: "There was an error submitting your application. Please try again.",
-          variant: "destructive",
-        });
-      }
-    } finally {
-      setIsSubmitting(false);
+      const result = await createApplication(applicationData).unwrap();
+      
+      toast.success('Application submitted successfully!');
+      router.push(`/user/applications/${result.applicationId}`);
+      
+    } catch (error: any) {
+      toast.error(error?.data?.error || 'Failed to submit application');
     }
+  };
+
+  const handleFileUpload = (documentType: string, files: any[]) => {
+    setUploadedFiles(prev => ({
+      ...prev,
+      [documentType]: files
+    }));
   };
 
   const renderStepContent = () => {
     switch (currentStep) {
       case 1:
         return (
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
                 <Label htmlFor="firstName">First Name *</Label>
                 <Input
                   id="firstName"
-                  value={formData.firstName || ''}
-                  onChange={(e) => handleInputChange('firstName', e.target.value)}
+                  value={formData.firstName}
+                  onChange={(e) => updateFormData('firstName', e.target.value)}
                   className={errors.firstName ? 'border-red-500' : ''}
                 />
-                {errors.firstName && <p className="text-sm text-red-600 mt-1">{errors.firstName}</p>}
+                {errors.firstName && <p className="text-sm text-red-500">{errors.firstName}</p>}
               </div>
-              <div>
+              
+              <div className="space-y-2">
                 <Label htmlFor="lastName">Last Name *</Label>
                 <Input
                   id="lastName"
-                  value={formData.lastName || ''}
-                  onChange={(e) => handleInputChange('lastName', e.target.value)}
+                  value={formData.lastName}
+                  onChange={(e) => updateFormData('lastName', e.target.value)}
                   className={errors.lastName ? 'border-red-500' : ''}
                 />
-                {errors.lastName && <p className="text-sm text-red-600 mt-1">{errors.lastName}</p>}
+                {errors.lastName && <p className="text-sm text-red-500">{errors.lastName}</p>}
               </div>
             </div>
-            <div>
-              <Label htmlFor="email">Email Address *</Label>
-              <Input
-                id="email"
-                type="email"
-                value={formData.email || ''}
-                onChange={(e) => handleInputChange('email', e.target.value)}
-                className={errors.email ? 'border-red-500' : ''}
-              />
-              {errors.email && <p className="text-sm text-red-600 mt-1">{errors.email}</p>}
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label htmlFor="email">Email Address *</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => updateFormData('email', e.target.value)}
+                  className={errors.email ? 'border-red-500' : ''}
+                />
+                {errors.email && <p className="text-sm text-red-500">{errors.email}</p>}
+              </div>
+              
+              <div className="space-y-2">
                 <Label htmlFor="phone">Phone Number *</Label>
                 <Input
                   id="phone"
-                  value={formData.phone || ''}
-                  onChange={(e) => handleInputChange('phone', e.target.value)}
+                  value={formData.phone}
+                  onChange={(e) => updateFormData('phone', e.target.value)}
                   className={errors.phone ? 'border-red-500' : ''}
                 />
-                {errors.phone && <p className="text-sm text-red-600 mt-1">{errors.phone}</p>}
+                {errors.phone && <p className="text-sm text-red-500">{errors.phone}</p>}
               </div>
-              <div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="space-y-2">
                 <Label htmlFor="dateOfBirth">Date of Birth *</Label>
                 <Input
                   id="dateOfBirth"
                   type="date"
-                  value={formData.dateOfBirth || ''}
-                  onChange={(e) => handleInputChange('dateOfBirth', e.target.value)}
+                  value={formData.dateOfBirth}
+                  onChange={(e) => updateFormData('dateOfBirth', e.target.value)}
                   className={errors.dateOfBirth ? 'border-red-500' : ''}
                 />
-                {errors.dateOfBirth && <p className="text-sm text-red-600 mt-1">{errors.dateOfBirth}</p>}
+                {errors.dateOfBirth && <p className="text-sm text-red-500">{errors.dateOfBirth}</p>}
               </div>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
+              
+              <div className="space-y-2">
                 <Label htmlFor="aadharNumber">Aadhar Number *</Label>
                 <Input
                   id="aadharNumber"
-                  value={formData.aadharNumber || ''}
-                  onChange={(e) => handleInputChange('aadharNumber', e.target.value)}
+                  value={formData.aadharNumber}
+                  onChange={(e) => updateFormData('aadharNumber', e.target.value)}
                   className={errors.aadharNumber ? 'border-red-500' : ''}
                   maxLength={12}
                 />
-                {errors.aadharNumber && <p className="text-sm text-red-600 mt-1">{errors.aadharNumber}</p>}
+                {errors.aadharNumber && <p className="text-sm text-red-500">{errors.aadharNumber}</p>}
               </div>
-              <div>
+              
+              <div className="space-y-2">
                 <Label htmlFor="panNumber">PAN Number *</Label>
                 <Input
                   id="panNumber"
-                  value={formData.panNumber || ''}
-                  onChange={(e) => handleInputChange('panNumber', e.target.value.toUpperCase())}
+                  value={formData.panNumber}
+                  onChange={(e) => updateFormData('panNumber', e.target.value.toUpperCase())}
                   className={errors.panNumber ? 'border-red-500' : ''}
                   maxLength={10}
                 />
-                {errors.panNumber && <p className="text-sm text-red-600 mt-1">{errors.panNumber}</p>}
+                {errors.panNumber && <p className="text-sm text-red-500">{errors.panNumber}</p>}
+              </div>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold">Address Information</h3>
+              
+              <div className="space-y-2">
+                <Label htmlFor="address">Full Address *</Label>
+                <Textarea
+                  id="address"
+                  value={formData.address}
+                  onChange={(e) => updateFormData('address', e.target.value)}
+                  className={errors.address ? 'border-red-500' : ''}
+                  rows={3}
+                />
+                {errors.address && <p className="text-sm text-red-500">{errors.address}</p>}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="city">City *</Label>
+                  <Input
+                    id="city"
+                    value={formData.city}
+                    onChange={(e) => updateFormData('city', e.target.value)}
+                    className={errors.city ? 'border-red-500' : ''}
+                  />
+                  {errors.city && <p className="text-sm text-red-500">{errors.city}</p>}
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="state">State *</Label>
+                  <Select value={formData.state} onValueChange={(value) => updateFormData('state', value)}>
+                    <SelectTrigger className={errors.state ? 'border-red-500' : ''}>
+                      <SelectValue placeholder="Select state" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="andhra-pradesh">Andhra Pradesh</SelectItem>
+                      <SelectItem value="karnataka">Karnataka</SelectItem>
+                      <SelectItem value="tamil-nadu">Tamil Nadu</SelectItem>
+                      <SelectItem value="telangana">Telangana</SelectItem>
+                      <SelectItem value="maharashtra">Maharashtra</SelectItem>
+                      <SelectItem value="gujarat">Gujarat</SelectItem>
+                      <SelectItem value="rajasthan">Rajasthan</SelectItem>
+                      <SelectItem value="uttar-pradesh">Uttar Pradesh</SelectItem>
+                      <SelectItem value="west-bengal">West Bengal</SelectItem>
+                      <SelectItem value="delhi">Delhi</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {errors.state && <p className="text-sm text-red-500">{errors.state}</p>}
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="pincode">Pincode *</Label>
+                  <Input
+                    id="pincode"
+                    value={formData.pincode}
+                    onChange={(e) => updateFormData('pincode', e.target.value)}
+                    className={errors.pincode ? 'border-red-500' : ''}
+                    maxLength={6}
+                  />
+                  {errors.pincode && <p className="text-sm text-red-500">{errors.pincode}</p>}
+                </div>
               </div>
             </div>
           </div>
@@ -311,255 +415,218 @@ export default function NewApplicationPage() {
 
       case 2:
         return (
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="address">Complete Address *</Label>
-              <Textarea
-                id="address"
-                value={formData.address || ''}
-                onChange={(e) => handleInputChange('address', e.target.value)}
-                className={errors.address ? 'border-red-500' : ''}
-                rows={3}
-              />
-              {errors.address && <p className="text-sm text-red-600 mt-1">{errors.address}</p>}
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="city">City *</Label>
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label htmlFor="institution">Institution Name *</Label>
                 <Input
-                  id="city"
-                  value={formData.city || ''}
-                  onChange={(e) => handleInputChange('city', e.target.value)}
-                  className={errors.city ? 'border-red-500' : ''}
+                  id="institution"
+                  value={formData.institution}
+                  onChange={(e) => updateFormData('institution', e.target.value)}
+                  className={errors.institution ? 'border-red-500' : ''}
                 />
-                {errors.city && <p className="text-sm text-red-600 mt-1">{errors.city}</p>}
+                {errors.institution && <p className="text-sm text-red-500">{errors.institution}</p>}
               </div>
-              <div>
-                <Label htmlFor="state">State *</Label>
-                <Select onValueChange={(value) => handleInputChange('state', value)}>
-                  <SelectTrigger className={errors.state ? 'border-red-500' : ''}>
-                    <SelectValue placeholder="Select State" />
+              
+              <div className="space-y-2">
+                <Label htmlFor="course">Course Name *</Label>
+                <Input
+                  id="course"
+                  value={formData.course}
+                  onChange={(e) => updateFormData('course', e.target.value)}
+                  className={errors.course ? 'border-red-500' : ''}
+                />
+                {errors.course && <p className="text-sm text-red-500">{errors.course}</p>}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="space-y-2">
+                <Label htmlFor="duration">Course Duration *</Label>
+                <Select value={formData.duration} onValueChange={(value) => updateFormData('duration', value)}>
+                  <SelectTrigger className={errors.duration ? 'border-red-500' : ''}>
+                    <SelectValue placeholder="Select duration" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="andhra-pradesh">Andhra Pradesh</SelectItem>
-                    <SelectItem value="karnataka">Karnataka</SelectItem>
-                    <SelectItem value="tamil-nadu">Tamil Nadu</SelectItem>
-                    <SelectItem value="telangana">Telangana</SelectItem>
-                    <SelectItem value="maharashtra">Maharashtra</SelectItem>
-                    <SelectItem value="delhi">Delhi</SelectItem>
-                    <SelectItem value="gujarat">Gujarat</SelectItem>
-                    <SelectItem value="rajasthan">Rajasthan</SelectItem>
-                    <SelectItem value="west-bengal">West Bengal</SelectItem>
-                    <SelectItem value="uttar-pradesh">Uttar Pradesh</SelectItem>
+                    <SelectItem value="1-year">1 Year</SelectItem>
+                    <SelectItem value="2-years">2 Years</SelectItem>
+                    <SelectItem value="3-years">3 Years</SelectItem>
+                    <SelectItem value="4-years">4 Years</SelectItem>
+                    <SelectItem value="5-years">5 Years</SelectItem>
                   </SelectContent>
                 </Select>
-                {errors.state && <p className="text-sm text-red-600 mt-1">{errors.state}</p>}
+                {errors.duration && <p className="text-sm text-red-500">{errors.duration}</p>}
               </div>
-            </div>
-            <div>
-              <Label htmlFor="pincode">Pincode *</Label>
-              <Input
-                id="pincode"
-                value={formData.pincode || ''}
-                onChange={(e) => handleInputChange('pincode', e.target.value)}
-                className={errors.pincode ? 'border-red-500' : ''}
-                maxLength={6}
-              />
-              {errors.pincode && <p className="text-sm text-red-600 mt-1">{errors.pincode}</p>}
+              
+              <div className="space-y-2">
+                <Label htmlFor="admissionDate">Admission Date *</Label>
+                <Input
+                  id="admissionDate"
+                  type="date"
+                  value={formData.admissionDate}
+                  onChange={(e) => updateFormData('admissionDate', e.target.value)}
+                  className={errors.admissionDate ? 'border-red-500' : ''}
+                />
+                {errors.admissionDate && <p className="text-sm text-red-500">{errors.admissionDate}</p>}
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="feeStructure">Total Fee Structure *</Label>
+                <Input
+                  id="feeStructure"
+                  type="number"
+                  value={formData.feeStructure || ''}
+                  onChange={(e) => updateFormData('feeStructure', parseInt(e.target.value) || 0)}
+                  className={errors.feeStructure ? 'border-red-500' : ''}
+                  placeholder="Enter total fees"
+                />
+                {errors.feeStructure && <p className="text-sm text-red-500">{errors.feeStructure}</p>}
+              </div>
             </div>
           </div>
         );
 
       case 3:
         return (
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="institution">Educational Institution *</Label>
-              <Input
-                id="institution"
-                value={formData.institution || ''}
-                onChange={(e) => handleInputChange('institution', e.target.value)}
-                className={errors.institution ? 'border-red-500' : ''}
-                placeholder="e.g., Stanford University, IIT Delhi"
-              />
-              {errors.institution && <p className="text-sm text-red-600 mt-1">{errors.institution}</p>}
-            </div>
-            <div>
-              <Label htmlFor="course">Course/Program *</Label>
-              <Input
-                id="course"
-                value={formData.course || ''}
-                onChange={(e) => handleInputChange('course', e.target.value)}
-                className={errors.course ? 'border-red-500' : ''}
-                placeholder="e.g., Masters in Computer Science, MBA"
-              />
-              {errors.course && <p className="text-sm text-red-600 mt-1">{errors.course}</p>}
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="duration">Course Duration *</Label>
-                <Select onValueChange={(value) => handleInputChange('duration', value)}>
-                  <SelectTrigger className={errors.duration ? 'border-red-500' : ''}>
-                    <SelectValue placeholder="Select Duration" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1 year">1 Year</SelectItem>
-                    <SelectItem value="2 years">2 Years</SelectItem>
-                    <SelectItem value="3 years">3 Years</SelectItem>
-                    <SelectItem value="4 years">4 Years</SelectItem>
-                    <SelectItem value="5 years">5 Years</SelectItem>
-                  </SelectContent>
-                </Select>
-                {errors.duration && <p className="text-sm text-red-600 mt-1">{errors.duration}</p>}
-              </div>
-              <div>
-                <Label htmlFor="admissionDate">Admission Date *</Label>
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label htmlFor="loanAmount">Loan Amount Required *</Label>
                 <Input
-                  id="admissionDate"
-                  type="date"
-                  value={formData.admissionDate || ''}
-                  onChange={(e) => handleInputChange('admissionDate', e.target.value)}
-                  className={errors.admissionDate ? 'border-red-500' : ''}
+                  id="loanAmount"
+                  type="number"
+                  value={formData.loanAmount || ''}
+                  onChange={(e) => updateFormData('loanAmount', parseInt(e.target.value) || 0)}
+                  className={errors.loanAmount ? 'border-red-500' : ''}
+                  placeholder="Enter loan amount"
                 />
-                {errors.admissionDate && <p className="text-sm text-red-600 mt-1">{errors.admissionDate}</p>}
+                <p className="text-sm text-gray-600">
+                  Minimum: {formatFullCurrency(50000)} | Maximum: {formatFullCurrency(5000000)}
+                </p>
+                {errors.loanAmount && <p className="text-sm text-red-500">{errors.loanAmount}</p>}
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="annualIncome">Annual Income *</Label>
+                <Input
+                  id="annualIncome"
+                  type="number"
+                  value={formData.annualIncome || ''}
+                  onChange={(e) => updateFormData('annualIncome', parseInt(e.target.value) || 0)}
+                  className={errors.annualIncome ? 'border-red-500' : ''}
+                  placeholder="Enter annual income"
+                />
+                {errors.annualIncome && <p className="text-sm text-red-500">{errors.annualIncome}</p>}
               </div>
             </div>
-            <div>
-              <Label htmlFor="feeStructure">Total Course Fee (₹) *</Label>
-              <Input
-                id="feeStructure"
-                type="number"
-                value={formData.feeStructure || ''}
-                onChange={(e) => handleInputChange('feeStructure', parseInt(e.target.value) || 0)}
-                className={errors.feeStructure ? 'border-red-500' : ''}
-                placeholder="e.g., 500000"
-              />
-              {errors.feeStructure && <p className="text-sm text-red-600 mt-1">{errors.feeStructure}</p>}
-            </div>
-          </div>
-        );
 
-      case 4:
-        return (
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="loanAmount">Loan Amount Required (₹) *</Label>
-              <Input
-                id="loanAmount"
-                type="number"
-                value={formData.loanAmount || ''}
-                onChange={(e) => handleInputChange('loanAmount', parseInt(e.target.value) || 0)}
-                className={errors.loanAmount ? 'border-red-500' : ''}
-                placeholder="e.g., 500000"
-              />
-              {errors.loanAmount && <p className="text-sm text-red-600 mt-1">{errors.loanAmount}</p>}
-              <p className="text-sm text-slate-500 mt-1">
-                Minimum: ₹50,000 | Maximum: ₹50,00,000
-              </p>
-            </div>
-            <div>
+            <div className="space-y-2">
               <Label htmlFor="purpose">Purpose of Loan *</Label>
               <Textarea
                 id="purpose"
-                value={formData.purpose || ''}
-                onChange={(e) => handleInputChange('purpose', e.target.value)}
+                value={formData.purpose}
+                onChange={(e) => updateFormData('purpose', e.target.value)}
                 className={errors.purpose ? 'border-red-500' : ''}
                 rows={3}
-                placeholder="Describe how you plan to use the loan amount..."
+                placeholder="Describe the purpose of the loan"
               />
-              {errors.purpose && <p className="text-sm text-red-600 mt-1">{errors.purpose}</p>}
+              {errors.purpose && <p className="text-sm text-red-500">{errors.purpose}</p>}
             </div>
-          </div>
-        );
 
-      case 5:
-        return (
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="annualIncome">Annual Income (₹) *</Label>
-              <Input
-                id="annualIncome"
-                type="number"
-                value={formData.annualIncome || ''}
-                onChange={(e) => handleInputChange('annualIncome', parseInt(e.target.value) || 0)}
-                className={errors.annualIncome ? 'border-red-500' : ''}
-                placeholder="e.g., 600000"
-              />
-              {errors.annualIncome && <p className="text-sm text-red-600 mt-1">{errors.annualIncome}</p>}
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="space-y-2">
                 <Label htmlFor="employmentType">Employment Type *</Label>
-                <Select onValueChange={(value) => handleInputChange('employmentType', value)}>
+                <Select value={formData.employmentType} onValueChange={(value) => updateFormData('employmentType', value)}>
                   <SelectTrigger className={errors.employmentType ? 'border-red-500' : ''}>
-                    <SelectValue placeholder="Select Employment Type" />
+                    <SelectValue placeholder="Select employment type" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="salaried">Salaried</SelectItem>
                     <SelectItem value="self-employed">Self Employed</SelectItem>
                     <SelectItem value="business">Business Owner</SelectItem>
-                    <SelectItem value="professional">Professional</SelectItem>
+                    <SelectItem value="freelancer">Freelancer</SelectItem>
+                    <SelectItem value="student">Student</SelectItem>
                   </SelectContent>
                 </Select>
-                {errors.employmentType && <p className="text-sm text-red-600 mt-1">{errors.employmentType}</p>}
+                {errors.employmentType && <p className="text-sm text-red-500">{errors.employmentType}</p>}
               </div>
-              <div>
+              
+              <div className="space-y-2">
                 <Label htmlFor="employerName">Employer/Company Name *</Label>
                 <Input
                   id="employerName"
-                  value={formData.employerName || ''}
-                  onChange={(e) => handleInputChange('employerName', e.target.value)}
+                  value={formData.employerName}
+                  onChange={(e) => updateFormData('employerName', e.target.value)}
                   className={errors.employerName ? 'border-red-500' : ''}
                 />
-                {errors.employerName && <p className="text-sm text-red-600 mt-1">{errors.employerName}</p>}
+                {errors.employerName && <p className="text-sm text-red-500">{errors.employerName}</p>}
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="workExperience">Work Experience *</Label>
+                <Select value={formData.workExperience} onValueChange={(value) => updateFormData('workExperience', value)}>
+                  <SelectTrigger className={errors.workExperience ? 'border-red-500' : ''}>
+                    <SelectValue placeholder="Select experience" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="0-1-years">0-1 Years</SelectItem>
+                    <SelectItem value="1-3-years">1-3 Years</SelectItem>
+                    <SelectItem value="3-5-years">3-5 Years</SelectItem>
+                    <SelectItem value="5-10-years">5-10 Years</SelectItem>
+                    <SelectItem value="10+-years">10+ Years</SelectItem>
+                  </SelectContent>
+                </Select>
+                {errors.workExperience && <p className="text-sm text-red-500">{errors.workExperience}</p>}
               </div>
             </div>
 
-            {/* Co-applicant Section */}
-            <div className="border-t pt-4">
-              <div className="flex items-center space-x-2 mb-4">
+            <Separator />
+
+            <div className="space-y-4">
+              <div className="flex items-center space-x-2">
                 <Checkbox
                   id="hasCoApplicant"
                   checked={formData.hasCoApplicant}
-                  onCheckedChange={(checked) => handleInputChange('hasCoApplicant', checked)}
+                  onCheckedChange={(checked) => updateFormData('hasCoApplicant', checked)}
                 />
                 <Label htmlFor="hasCoApplicant">Add Co-applicant (Optional)</Label>
               </div>
 
               {formData.hasCoApplicant && (
-                <div className="space-y-4 pl-6 border-l-2 border-slate-200">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="coApplicantName">Co-applicant Name</Label>
-                      <Input
-                        id="coApplicantName"
-                        value={formData.coApplicantName || ''}
-                        onChange={(e) => handleInputChange('coApplicantName', e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="coApplicantRelation">Relationship</Label>
-                      <Select onValueChange={(value) => handleInputChange('coApplicantRelation', value)}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select Relationship" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="father">Father</SelectItem>
-                          <SelectItem value="mother">Mother</SelectItem>
-                          <SelectItem value="spouse">Spouse</SelectItem>
-                          <SelectItem value="sibling">Sibling</SelectItem>
-                          <SelectItem value="guardian">Guardian</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-4 border rounded-lg bg-gray-50">
+                  <div className="space-y-2">
+                    <Label htmlFor="coApplicantName">Co-applicant Name</Label>
+                    <Input
+                      id="coApplicantName"
+                      value={formData.coApplicantName}
+                      onChange={(e) => updateFormData('coApplicantName', e.target.value)}
+                    />
                   </div>
-                  <div>
-                    <Label htmlFor="coApplicantIncome">Co-applicant Annual Income (₹)</Label>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="coApplicantRelation">Relation</Label>
+                    <Select value={formData.coApplicantRelation} onValueChange={(value) => updateFormData('coApplicantRelation', value)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select relation" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="father">Father</SelectItem>
+                        <SelectItem value="mother">Mother</SelectItem>
+                        <SelectItem value="spouse">Spouse</SelectItem>
+                        <SelectItem value="sibling">Sibling</SelectItem>
+                        <SelectItem value="guardian">Guardian</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="coApplicantIncome">Annual Income</Label>
                     <Input
                       id="coApplicantIncome"
                       type="number"
                       value={formData.coApplicantIncome || ''}
-                      onChange={(e) => handleInputChange('coApplicantIncome', parseInt(e.target.value) || 0)}
+                      onChange={(e) => updateFormData('coApplicantIncome', parseInt(e.target.value) || 0)}
+                      placeholder="Enter annual income"
                     />
                   </div>
                 </div>
@@ -568,109 +635,162 @@ export default function NewApplicationPage() {
           </div>
         );
 
-      case 6:
+      case 4:
         return (
           <div className="space-y-6">
-            {/* Service Charge Information */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-              <div className="flex items-start gap-4">
-                <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
-                  <CreditCard className="h-6 w-6 text-white" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="font-semibold text-blue-900 mb-2">Service Charge Required</h3>
-                  <p className="text-blue-800 mb-4">
-                    A one-time service charge of ₹99 is required to process your education loan application.
-                    This fee covers application processing, document verification, and initial assessment.
-                  </p>
-                  <div className="bg-white rounded-lg p-4 border border-blue-200">
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-slate-600">Application Processing Fee</span>
-                      <span className="font-semibold text-slate-900">₹99</span>
-                    </div>
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-slate-600">Payment Gateway Charges</span>
-                      <span className="font-semibold text-slate-900">₹0</span>
-                    </div>
-                    <div className="border-t pt-2 mt-2">
-                      <div className="flex justify-between items-center">
-                        <span className="font-semibold text-slate-900">Total Amount</span>
-                        <span className="font-bold text-lg text-blue-600">₹99</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+            <div className="text-center mb-6">
+              <h3 className="text-lg font-semibold mb-2">Upload Required Documents</h3>
+              <p className="text-gray-600">Please upload all required documents to proceed with your application</p>
             </div>
 
-            {/* Payment Security Information */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="flex items-center gap-3 p-4 bg-green-50 rounded-lg border border-green-200">
-                <Shield className="h-8 w-8 text-green-600" />
-                <div>
-                  <h4 className="font-medium text-green-900">Secure Payment</h4>
-                  <p className="text-sm text-green-700">256-bit SSL encrypted</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3 p-4 bg-orange-50 rounded-lg border border-orange-200">
-                <Clock className="h-8 w-8 text-orange-600" />
-                <div>
-                  <h4 className="font-medium text-orange-900">Instant Processing</h4>
-                  <p className="text-sm text-orange-700">Immediate confirmation</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3 p-4 bg-purple-50 rounded-lg border border-purple-200">
-                <CheckCircle className="h-8 w-8 text-purple-600" />
-                <div>
-                  <h4 className="font-medium text-purple-900">Multiple Options</h4>
-                  <p className="text-sm text-purple-700">Card, UPI, Net Banking</p>
-                </div>
-              </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <FileUpload
+                documentType="aadhar_card"
+                onFilesChange={(files) => handleFileUpload('aadhar_card', files)}
+                required
+              />
+              
+              <FileUpload
+                documentType="pan_card"
+                onFilesChange={(files) => handleFileUpload('pan_card', files)}
+                required
+              />
+              
+              <FileUpload
+                documentType="income_certificate"
+                onFilesChange={(files) => handleFileUpload('income_certificate', files)}
+                required
+              />
+              
+              <FileUpload
+                documentType="bank_statement"
+                onFilesChange={(files) => handleFileUpload('bank_statement', files)}
+                required
+              />
+              
+              <FileUpload
+                documentType="admission_letter"
+                onFilesChange={(files) => handleFileUpload('admission_letter', files)}
+                required
+              />
+              
+              <FileUpload
+                documentType="fee_structure"
+                onFilesChange={(files) => handleFileUpload('fee_structure', files)}
+                required
+              />
             </div>
 
-            {/* Important Notes */}
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <div className="flex items-start gap-3">
-                <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5" />
-                <div>
-                  <h4 className="font-medium text-yellow-900 mb-2">Important Information</h4>
-                  <ul className="text-sm text-yellow-800 space-y-1">
-                    <li>• This is a one-time, non-refundable service charge</li>
-                    <li>• Payment is required to proceed with application processing</li>
-                    <li>• You will receive a payment confirmation via email and SMS</li>
-                    <li>• Your application will be assigned to DSAs only after successful payment</li>
-                  </ul>
+            {Object.keys(errors).some(key => key.includes('_')) && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <div className="flex items-center space-x-2 text-red-600">
+                  <AlertCircle className="h-5 w-5" />
+                  <span className="font-medium">Missing Required Documents</span>
                 </div>
+                <ul className="mt-2 text-sm text-red-600 list-disc list-inside">
+                  {Object.entries(errors)
+                    .filter(([key]) => key.includes('_'))
+                    .map(([key, error]) => (
+                      <li key={key}>{error}</li>
+                    ))}
+                </ul>
               </div>
-            </div>
+            )}
           </div>
         );
 
-      case 7:
+      case 5:
         return (
           <div className="space-y-6">
-            {/* Application Summary */}
-            <div className="bg-slate-50 p-4 rounded-lg">
-              <h3 className="font-semibold text-slate-900 mb-3">Application Summary</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-slate-600">Applicant:</span>
-                  <span className="ml-2 font-medium">{formData.firstName} {formData.lastName}</span>
-                </div>
-                <div>
-                  <span className="text-slate-600">Institution:</span>
-                  <span className="ml-2 font-medium">{formData.institution}</span>
-                </div>
-                <div>
-                  <span className="text-slate-600">Course:</span>
-                  <span className="ml-2 font-medium">{formData.course}</span>
-                </div>
-                <div>
-                  <span className="text-slate-600">Loan Amount:</span>
-                  <span className="ml-2 font-medium">₹{formData.loanAmount?.toLocaleString()}</span>
-                </div>
-              </div>
+            <div className="text-center mb-6">
+              <h3 className="text-lg font-semibold mb-2">Review Your Application</h3>
+              <p className="text-gray-600">Please review all information before submitting</p>
             </div>
+
+            {/* Personal Information Summary */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <User className="h-5 w-5" />
+                  <span>Personal Information</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div><strong>Name:</strong> {formData.firstName} {formData.lastName}</div>
+                  <div><strong>Email:</strong> {formData.email}</div>
+                  <div><strong>Phone:</strong> {formData.phone}</div>
+                  <div><strong>Date of Birth:</strong> {formData.dateOfBirth}</div>
+                  <div><strong>Aadhar:</strong> {formData.aadharNumber}</div>
+                  <div><strong>PAN:</strong> {formData.panNumber}</div>
+                </div>
+                <div className="text-sm">
+                  <strong>Address:</strong> {formData.address}, {formData.city}, {formData.state} - {formData.pincode}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Education Information Summary */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <GraduationCap className="h-5 w-5" />
+                  <span>Education Information</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div><strong>Institution:</strong> {formData.institution}</div>
+                  <div><strong>Course:</strong> {formData.course}</div>
+                  <div><strong>Duration:</strong> {formData.duration}</div>
+                  <div><strong>Admission Date:</strong> {formData.admissionDate}</div>
+                  <div><strong>Total Fees:</strong> {formatFullCurrency(formData.feeStructure)}</div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Financial Information Summary */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <DollarSign className="h-5 w-5" />
+                  <span>Financial Information</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div><strong>Loan Amount:</strong> {formatFullCurrency(formData.loanAmount)}</div>
+                  <div><strong>Annual Income:</strong> {formatFullCurrency(formData.annualIncome)}</div>
+                  <div><strong>Employment:</strong> {formData.employmentType}</div>
+                  <div><strong>Employer:</strong> {formData.employerName}</div>
+                  <div><strong>Experience:</strong> {formData.workExperience}</div>
+                </div>
+                <div className="text-sm">
+                  <strong>Purpose:</strong> {formData.purpose}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Service Charge Information */}
+            <Card className="border-blue-200 bg-blue-50">
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2 text-blue-700">
+                  <CreditCard className="h-5 w-5" />
+                  <span>Service Charges</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-blue-600">Application Processing Fee</p>
+                    <p className="text-xs text-blue-500">One-time non-refundable fee</p>
+                  </div>
+                  <div className="text-right">
+                    <span className="font-bold text-lg text-blue-600">{formatFullCurrency(99)}</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Terms and Conditions */}
             <div className="space-y-4">
@@ -678,43 +798,29 @@ export default function NewApplicationPage() {
                 <Checkbox
                   id="agreeToTerms"
                   checked={formData.agreeToTerms}
-                  onCheckedChange={(checked) => handleInputChange('agreeToTerms', checked)}
+                  onCheckedChange={(checked) => updateFormData('agreeToTerms', checked)}
+                  className={errors.agreeToTerms ? 'border-red-500' : ''}
                 />
                 <Label htmlFor="agreeToTerms" className="text-sm leading-relaxed">
                   I agree to the <a href="#" className="text-blue-600 hover:underline">Terms and Conditions</a> and 
-                  understand that providing false information may result in rejection of my application.
+                  understand that the information provided is accurate and complete.
                 </Label>
               </div>
-              {errors.agreeToTerms && <p className="text-sm text-red-600">{errors.agreeToTerms}</p>}
+              {errors.agreeToTerms && <p className="text-sm text-red-500 ml-6">{errors.agreeToTerms}</p>}
 
               <div className="flex items-start space-x-2">
                 <Checkbox
-                  id="agreeToDataProcessing"
-                  checked={formData.agreeToDataProcessing}
-                  onCheckedChange={(checked) => handleInputChange('agreeToDataProcessing', checked)}
+                  id="agreeToProcessing"
+                  checked={formData.agreeToProcessing}
+                  onCheckedChange={(checked) => updateFormData('agreeToProcessing', checked)}
+                  className={errors.agreeToProcessing ? 'border-red-500' : ''}
                 />
-                <Label htmlFor="agreeToDataProcessing" className="text-sm leading-relaxed">
+                <Label htmlFor="agreeToProcessing" className="text-sm leading-relaxed">
                   I consent to the processing of my personal data for loan application purposes and 
-                  agree to the <a href="#" className="text-blue-600 hover:underline">Privacy Policy</a>.
+                  communication from authorized DSAs and bank representatives.
                 </Label>
               </div>
-              {errors.agreeToDataProcessing && <p className="text-sm text-red-600">{errors.agreeToDataProcessing}</p>}
-            </div>
-
-            {/* Important Notes */}
-            <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
-              <div className="flex items-start">
-                <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5 mr-2 flex-shrink-0" />
-                <div className="text-sm text-blue-800">
-                  <p className="font-medium mb-1">Important Notes:</p>
-                  <ul className="list-disc list-inside space-y-1">
-                    <li>Your application will be reviewed within 3-5 business days</li>
-                    <li>You will be assigned a DSA who will guide you through the process</li>
-                    <li>Additional documents may be requested during review</li>
-                    <li>Loan approval is subject to bank&apos;s terms and conditions</li>
-                  </ul>
-                </div>
-              </div>
+              {errors.agreeToProcessing && <p className="text-sm text-red-500 ml-6">{errors.agreeToProcessing}</p>}
             </div>
           </div>
         );
@@ -726,50 +832,70 @@ export default function NewApplicationPage() {
 
   return (
     <DashboardLayout>
-      <div className="max-w-4xl mx-auto space-y-6 lg:space-y-8">
+      <div className="max-w-4xl mx-auto p-6 space-y-6">
         {/* Header */}
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => router.back()}
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">New Education Loan Application</h1>
-            <p className="text-slate-600">Complete all steps to submit your application</p>
-          </div>
+        <div className="text-center">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">New Loan Application</h1>
+          <p className="text-gray-600">Complete your education loan application in simple steps</p>
+        </div>
+
+        {/* Progress Steps */}
+        <div className="flex items-center justify-between mb-8">
+          {steps.map((step, index) => {
+            const isActive = currentStep === step.id;
+            const isCompleted = currentStep > step.id;
+            const IconComponent = step.icon;
+
+            return (
+              <div key={step.id} className="flex items-center">
+                <div className={`flex items-center justify-center w-10 h-10 rounded-full border-2 ${
+                  isCompleted ? 'bg-green-500 border-green-500 text-white' :
+                  isActive ? 'bg-blue-500 border-blue-500 text-white' :
+                  'bg-gray-100 border-gray-300 text-gray-400'
+                }`}>
+                  {isCompleted ? (
+                    <CheckCircle className="h-5 w-5" />
+                  ) : (
+                    <IconComponent className="h-5 w-5" />
+                  )}
+                </div>
+                <div className="ml-3 hidden sm:block">
+                  <p className={`text-sm font-medium ${
+                    isActive ? 'text-blue-600' : isCompleted ? 'text-green-600' : 'text-gray-500'
+                  }`}>
+                    {step.title}
+                  </p>
+                  <p className="text-xs text-gray-500">{step.description}</p>
+                </div>
+                {index < steps.length - 1 && (
+                  <div className={`hidden sm:block w-16 h-0.5 ml-4 ${
+                    isCompleted ? 'bg-green-500' : 'bg-gray-300'
+                  }`} />
+                )}
+              </div>
+            );
+          })}
         </div>
 
         {/* Progress Bar */}
-        <Card className="bg-white border border-slate-200">
-          <CardContent className="p-4 sm:p-6">
-            <div className="flex items-center justify-between mb-4">
-              <span className="text-sm font-medium text-slate-700">
-                Step {currentStep} of {totalSteps}: {stepTitles[currentStep - 1]}
-              </span>
-              <span className="text-sm text-slate-500">{Math.round(progress)}% Complete</span>
-            </div>
-            <Progress value={progress} className="h-2" />
-          </CardContent>
-        </Card>
+        <div className="mb-8">
+          <div className="flex justify-between text-sm text-gray-600 mb-2">
+            <span>Step {currentStep} of {steps.length}</span>
+            <span>{Math.round((currentStep / steps.length) * 100)}% Complete</span>
+          </div>
+          <Progress value={(currentStep / steps.length) * 100} className="h-2" />
+        </div>
 
-        {/* Form Content */}
-        <Card className="bg-white border border-slate-200">
-          <CardHeader className="border-b border-slate-100">
-            <CardTitle>{stepTitles[currentStep - 1]}</CardTitle>
-            <CardDescription>
-              {currentStep === 6
-                ? 'Service charge information and payment details'
-                : currentStep === 7
-                ? 'Review your information and submit your application'
-                : 'Please fill in all required fields marked with *'
-              }
-            </CardDescription>
+        {/* Step Content */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              {React.createElement(steps[currentStep - 1].icon, { className: "h-5 w-5" })}
+              <span>{steps[currentStep - 1].title}</span>
+            </CardTitle>
+            <CardDescription>{steps[currentStep - 1].description}</CardDescription>
           </CardHeader>
-          <CardContent className="p-4 sm:p-6">
+          <CardContent>
             {renderStepContent()}
           </CardContent>
         </Card>
@@ -778,39 +904,41 @@ export default function NewApplicationPage() {
         <div className="flex justify-between">
           <Button
             variant="outline"
-            onClick={handlePrevious}
+            onClick={prevStep}
             disabled={currentStep === 1}
+            className="flex items-center space-x-2"
           >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Previous
+            <ArrowLeft className="h-4 w-4" />
+            <span>Previous</span>
           </Button>
 
-          <div className="flex gap-2">
-            {currentStep < totalSteps ? (
-              <Button onClick={handleNext}>
-                Next
-                <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
-            ) : (
-              <Button
-                onClick={handleSubmit}
-                disabled={isSubmitting}
-                className="bg-green-600 hover:bg-green-700"
-              >
-                {isSubmitting ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Submitting...
-                  </>
-                ) : (
-                  <>
-                    <Send className="h-4 w-4 mr-2" />
-                    Submit Application
-                  </>
-                )}
-              </Button>
-            )}
-          </div>
+          {currentStep < steps.length ? (
+            <Button
+              onClick={nextStep}
+              className="flex items-center space-x-2"
+            >
+              <span>Next</span>
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          ) : (
+            <Button
+              onClick={handleSubmit}
+              disabled={isSubmitting}
+              className="flex items-center space-x-2 bg-green-600 hover:bg-green-700"
+            >
+              {isSubmitting ? (
+                <>
+                  <Clock className="h-4 w-4 animate-spin" />
+                  <span>Submitting...</span>
+                </>
+              ) : (
+                <>
+                  <Send className="h-4 w-4" />
+                  <span>Submit Application</span>
+                </>
+              )}
+            </Button>
+          )}
         </div>
       </div>
     </DashboardLayout>

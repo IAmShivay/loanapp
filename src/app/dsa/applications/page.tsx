@@ -1,5 +1,8 @@
-import { getAuthSession } from '@/lib/auth/utils';
-import { redirect } from 'next/navigation';
+'use client';
+
+import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import { DashboardLayout } from '@/components/layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,72 +12,57 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Search, Filter, FileText, MoreHorizontal, Eye, Edit, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import Link from 'next/link';
+import {
+  useGetApplicationsQuery,
+  useUpdateApplicationStatusMutation
+} from '@/store/api/apiSlice';
+import LoadingSpinner from '@/components/common/LoadingSpinner';
+import { safeString, safeNumber, safeDate, formatCurrency } from '@/lib/utils/fallbacks';
+import { toast } from 'sonner';
 
-export default async function DSAApplicationsPage() {
-  const session = await getAuthSession();
-  
-  if (!session?.user || session.user.role !== 'dsa') {
-    redirect('/login');
+export default function DSAApplicationsPage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+
+  if (status === 'loading') {
+    return <LoadingSpinner />;
   }
 
-  // TODO: Replace with actual API call - filter by DSA ID
-  const applications = [
-    {
-      id: 'LA202412001',
-      applicantName: 'John Doe',
-      applicantEmail: 'john@example.com',
-      phone: '+91 9876543210',
-      loanAmount: 500000,
-      purpose: 'Masters in Computer Science',
-      institution: 'Stanford University',
-      course: 'MS Computer Science',
-      duration: '2 years',
-      status: 'pending_review',
-      submittedAt: '2024-12-10T10:30:00Z',
-      deadline: '2024-12-13T23:59:59Z',
-      priority: 'high',
-      documents: ['aadhar', 'pan', 'income_proof', 'admission_letter'],
-      completedDocuments: 4,
-      totalDocuments: 6
-    },
-    {
-      id: 'LA202412002',
-      applicantName: 'Alice Johnson',
-      applicantEmail: 'alice@example.com',
-      phone: '+91 9876543211',
-      loanAmount: 750000,
-      purpose: 'MBA Program',
-      institution: 'Harvard Business School',
-      course: 'MBA',
-      duration: '2 years',
-      status: 'under_review',
-      submittedAt: '2024-12-08T14:20:00Z',
-      deadline: '2024-12-11T23:59:59Z',
-      priority: 'medium',
-      documents: ['aadhar', 'pan', 'income_proof', 'admission_letter', 'bank_statements'],
-      completedDocuments: 6,
-      totalDocuments: 6
-    },
-    {
-      id: 'LA202412003',
-      applicantName: 'Bob Smith',
-      applicantEmail: 'bob@example.com',
-      phone: '+91 9876543212',
-      loanAmount: 300000,
-      purpose: 'Engineering Degree',
-      institution: 'IIT Delhi',
-      course: 'B.Tech Computer Science',
-      duration: '4 years',
-      status: 'approved',
-      submittedAt: '2024-12-07T09:15:00Z',
-      deadline: '2024-12-10T23:59:59Z',
-      priority: 'low',
-      documents: ['aadhar', 'pan', 'income_proof', 'admission_letter', 'bank_statements', 'collateral_docs'],
-      completedDocuments: 6,
-      totalDocuments: 6,
-      approvedAt: '2024-12-09T16:45:00Z'
+  if (!session?.user || session.user.role !== 'dsa') {
+    router.push('/login');
+    return null;
+  }
+
+  const [statusFilter, setStatusFilter] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // RTK Query hooks
+  const {
+    data: applicationsData,
+    isLoading: applicationsLoading,
+    error: applicationsError,
+    refetch: refetchApplications
+  } = useGetApplicationsQuery({
+    status: statusFilter || undefined,
+    search: searchTerm || undefined,
+    limit: 50,
+    page: 1
+  });
+
+  const [updateApplicationStatus] = useUpdateApplicationStatusMutation();
+
+  const applications = applicationsData?.applications || [];
+
+  const handleStatusUpdate = async (applicationId: string, newStatus: string) => {
+    try {
+      await updateApplicationStatus({ applicationId, status: newStatus }).unwrap();
+      toast.success('Application status updated successfully');
+      refetchApplications();
+    } catch (error) {
+      toast.error('Failed to update application status');
+      console.error('Error updating application:', error);
     }
-  ];
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -126,6 +114,14 @@ export default async function DSAApplicationsPage() {
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return diffDays;
   };
+
+  if (applicationsLoading) {
+    return (
+      <DashboardLayout>
+        <LoadingSpinner />
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -191,7 +187,7 @@ export default async function DSAApplicationsPage() {
                 <div>
                   <p className="text-sm font-medium text-slate-600">Total Amount</p>
                   <p className="text-2xl font-bold text-slate-900">
-                    ₹{(applications.reduce((sum, app) => sum + app.loanAmount, 0) / 100000).toFixed(1)}L
+                    ₹{(applications.reduce((sum, app) => sum + safeNumber(app.loanInfo?.amount, 0), 0) / 100000).toFixed(1)}L
                   </p>
                 </div>
                 <FileText className="h-5 w-5 text-purple-600" />
