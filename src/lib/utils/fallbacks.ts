@@ -95,44 +95,73 @@ export function safeStatistics(stats: any) {
 export function safeApplication(app: any) {
   return {
     _id: safeString(app?._id, ''),
-    applicationId: safeString(app?.applicationId, 'N/A'),
+    applicationNumber: safeString(app?.applicationNumber, 'N/A'),
     status: safeString(app?.status, 'pending'),
     priority: safeString(app?.priority, 'medium'),
     paymentStatus: safeString(app?.paymentStatus, 'pending'),
     serviceChargesPaid: Boolean(app?.serviceChargesPaid),
+    // Personal Details (from LoanApplication model)
+    personalDetails: {
+      fullName: safeString(app?.personalDetails?.fullName, 'N/A'),
+      dateOfBirth: safeDate(app?.personalDetails?.dateOfBirth, new Date()),
+      gender: safeString(app?.personalDetails?.gender, 'N/A'),
+      maritalStatus: safeString(app?.personalDetails?.maritalStatus, 'N/A'),
+      address: {
+        street: safeString(app?.personalDetails?.address?.street, 'N/A'),
+        city: safeString(app?.personalDetails?.address?.city, 'N/A'),
+        state: safeString(app?.personalDetails?.address?.state, 'N/A'),
+        zipCode: safeString(app?.personalDetails?.address?.zipCode, 'N/A'),
+        country: safeString(app?.personalDetails?.address?.country, 'India'),
+      },
+      employment: {
+        type: safeString(app?.personalDetails?.employment?.type, 'N/A'),
+        companyName: safeString(app?.personalDetails?.employment?.companyName, 'N/A'),
+        designation: safeString(app?.personalDetails?.employment?.designation, 'N/A'),
+        workExperience: safeNumber(app?.personalDetails?.employment?.workExperience, 0),
+      },
+      income: safeNumber(app?.personalDetails?.income, 0),
+    },
+    // Loan Details (from LoanApplication model)
+    loanDetails: {
+      amount: safeNumber(app?.loanDetails?.amount, 0),
+      purpose: safeString(app?.loanDetails?.purpose, 'N/A'),
+      tenure: safeNumber(app?.loanDetails?.tenure, 0),
+      interestRate: safeNumber(app?.loanDetails?.interestRate, 0),
+    },
+    // Legacy support for old structure (for backward compatibility)
     personalInfo: {
-      firstName: safeString(app?.personalInfo?.firstName, 'N/A'),
-      lastName: safeString(app?.personalInfo?.lastName, ''),
-      email: safeString(app?.personalInfo?.email, 'N/A'),
-      phone: safeString(app?.personalInfo?.phone, 'N/A'),
-      dateOfBirth: safeString(app?.personalInfo?.dateOfBirth, new Date().toISOString()),
+      firstName: safeString(app?.personalDetails?.fullName?.split(' ')[0], 'N/A'),
+      lastName: safeString(app?.personalDetails?.fullName?.split(' ').slice(1).join(' '), ''),
+      email: safeString(app?.userId?.email, 'N/A'), // Email comes from user reference
+      phone: safeString(app?.userId?.phone, 'N/A'), // Phone comes from user reference
+      dateOfBirth: safeDate(app?.personalDetails?.dateOfBirth, new Date()),
     },
     addressInfo: {
-      address: safeString(app?.addressInfo?.address, 'N/A'),
-      city: safeString(app?.addressInfo?.city, 'N/A'),
-      state: safeString(app?.addressInfo?.state, 'N/A'),
-      pincode: safeString(app?.addressInfo?.pincode, 'N/A'),
+      address: safeString(app?.personalDetails?.address?.street, 'N/A'),
+      city: safeString(app?.personalDetails?.address?.city, 'N/A'),
+      state: safeString(app?.personalDetails?.address?.state, 'N/A'),
+      pincode: safeString(app?.personalDetails?.address?.zipCode, 'N/A'),
     },
     educationInfo: {
-      instituteName: safeString(app?.educationInfo?.instituteName, 'N/A'),
-      course: safeString(app?.educationInfo?.course, 'N/A'),
-      duration: safeString(app?.educationInfo?.duration, 'N/A'),
-      feeStructure: safeNumber(app?.educationInfo?.feeStructure, 0),
-      admissionDate: safeString(app?.educationInfo?.admissionDate, new Date().toISOString()),
+      instituteName: safeString(app?.educationInfo?.instituteName || app?.personalDetails?.education?.instituteName, 'N/A'),
+      course: safeString(app?.educationInfo?.course || app?.personalDetails?.education?.course, 'N/A'),
+      duration: safeString(app?.educationInfo?.duration || app?.personalDetails?.education?.duration, 'N/A'),
+      feeStructure: safeNumber(app?.educationInfo?.feeStructure || app?.personalDetails?.education?.feeStructure, 0),
+      admissionDate: safeDate(app?.educationInfo?.admissionDate || app?.personalDetails?.education?.admissionDate, new Date()),
     },
     loanInfo: {
-      amount: safeNumber(app?.loanInfo?.amount, 0),
-      purpose: safeString(app?.loanInfo?.purpose, 'N/A'),
+      amount: safeNumber(app?.loanDetails?.amount, 0),
+      purpose: safeString(app?.loanDetails?.purpose, 'N/A'),
     },
     financialInfo: {
-      annualIncome: safeNumber(app?.financialInfo?.annualIncome, 0),
-      employmentType: safeString(app?.financialInfo?.employmentType, 'N/A'),
-      employerName: safeString(app?.financialInfo?.employerName, 'N/A'),
+      annualIncome: safeNumber(app?.personalDetails?.income, 0),
+      employmentType: safeString(app?.personalDetails?.employment?.type, 'N/A'),
+      employerName: safeString(app?.personalDetails?.employment?.companyName, 'N/A'),
     },
     assignedDSAs: safeArray(app?.assignedDSAs, []),
     documents: safeArray(app?.documents, []),
-    createdAt: safeString(app?.createdAt, new Date().toISOString()),
-    updatedAt: safeString(app?.updatedAt, new Date().toISOString()),
+    createdAt: safeDate(app?.createdAt, new Date()),
+    updatedAt: safeDate(app?.updatedAt, new Date()),
   };
 }
 

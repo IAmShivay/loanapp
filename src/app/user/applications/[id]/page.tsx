@@ -198,7 +198,7 @@ export default function ApplicationDetailPage() {
             </Link>
             <div>
               <h1 className="text-2xl font-bold text-gray-900">
-                Application #{safeApp.applicationId}
+                Application #{safeApp.applicationNumber}
               </h1>
               <p className="text-gray-600">
                 {safeApp.educationInfo.course} at {safeApp.educationInfo.instituteName}
@@ -260,7 +260,7 @@ export default function ApplicationDetailPage() {
                   <div>
                     <p className="text-sm font-medium text-gray-500">Full Name</p>
                     <p className="text-sm text-gray-900">
-                      {safeApp.personalInfo.firstName} {safeApp.personalInfo.lastName}
+                      {safeApp.personalDetails.fullName}
                     </p>
                   </div>
                   <div>
@@ -282,7 +282,7 @@ export default function ApplicationDetailPage() {
                     <div className="flex items-center gap-2">
                       <Calendar className="h-4 w-4 text-gray-400" />
                       <p className="text-sm text-gray-900">
-                        {new Date(safeApp.personalInfo.dateOfBirth).toLocaleDateString()}
+                        {new Date(safeApp.personalDetails.dateOfBirth).toLocaleDateString()}
                       </p>
                     </div>
                   </div>
@@ -293,7 +293,7 @@ export default function ApplicationDetailPage() {
                   <div className="flex items-start gap-2 mt-1">
                     <MapPin className="h-4 w-4 text-gray-400 mt-0.5" />
                     <p className="text-sm text-gray-900">
-                      {safeApp.addressInfo.address}, {safeApp.addressInfo.city}, {safeApp.addressInfo.state} - {safeApp.addressInfo.pincode}
+                      {safeApp.personalDetails.address.street}, {safeApp.personalDetails.address.city}, {safeApp.personalDetails.address.state} - {safeApp.personalDetails.address.zipCode}
                     </p>
                   </div>
                 </div>
@@ -381,13 +381,17 @@ export default function ApplicationDetailPage() {
                 <div>
                   <p className="text-sm font-medium text-gray-500">Requested Amount</p>
                   <p className="text-2xl font-bold text-gray-900">
-                    {formatLoanAmount(safeApp.loanInfo.amount)}
+                    {formatLoanAmount(safeApp.loanDetails.amount)}
                   </p>
                 </div>
                 <Separator />
                 <div>
                   <p className="text-sm font-medium text-gray-500">Purpose</p>
-                  <p className="text-sm text-gray-900">{safeApp.loanInfo.purpose}</p>
+                  <p className="text-sm text-gray-900">{safeApp.loanDetails.purpose}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-500">Tenure</p>
+                  <p className="text-sm text-gray-900">{safeApp.loanDetails.tenure} months</p>
                 </div>
                 <Separator />
                 <div>

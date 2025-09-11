@@ -49,6 +49,25 @@ export default function UserSupportPage() {
     priority: 'medium' as const
   });
 
+  // RTK Query hooks - must be called before conditional returns
+  const {
+    data: ticketsData,
+    isLoading: ticketsLoading,
+    error: ticketsError,
+    refetch: refetchTickets
+  } = useGetSupportTicketsQuery({
+    status: statusFilter && statusFilter !== 'all' ? statusFilter : undefined,
+    category: categoryFilter && categoryFilter !== 'all' ? categoryFilter : undefined,
+    limit: 20,
+    page: 1
+  }, {
+    skip: !session?.user || session.user.role !== 'user'
+  });
+
+  const [createTicket, { isLoading: createLoading }] = useCreateSupportTicketMutation();
+  const [addMessage] = useAddSupportTicketMessageMutation();
+
+  // Conditional returns after all hooks
   if (status === 'loading') {
     return (
       <DashboardLayout>
@@ -65,22 +84,6 @@ export default function UserSupportPage() {
     router.push('/login');
     return null;
   }
-
-  // RTK Query hooks
-  const {
-    data: ticketsData,
-    isLoading: ticketsLoading,
-    error: ticketsError,
-    refetch: refetchTickets
-  } = useGetSupportTicketsQuery({
-    status: statusFilter && statusFilter !== 'all' ? statusFilter : undefined,
-    category: categoryFilter && categoryFilter !== 'all' ? categoryFilter : undefined,
-    limit: 20,
-    page: 1
-  });
-
-  const [createTicket, { isLoading: createLoading }] = useCreateSupportTicketMutation();
-  const [addMessage] = useAddSupportTicketMessageMutation();
 
   const supportTickets = ticketsData?.tickets || [];
 
