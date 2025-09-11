@@ -17,7 +17,10 @@ import {
   Smile,
   Clock,
   CheckCheck,
-  User
+  User,
+  Users,
+  CheckCircle,
+  XCircle
 } from 'lucide-react';
 
 export default async function UserChatPage() {
@@ -28,13 +31,41 @@ export default async function UserChatPage() {
   }
 
   // TODO: Replace with actual API calls
+  const userApplications = [
+    {
+      id: 'app1',
+      applicationId: 'LA202412001',
+      status: 'partially_approved',
+      canSelectDSA: true,
+      availableDSAs: [
+        {
+          id: 'dsa1',
+          name: 'Jane Smith',
+          email: 'jane.smith@sbi.co.in',
+          reviewStatus: 'approved',
+          isSelected: true
+        },
+        {
+          id: 'dsa2',
+          name: 'Raj Kumar',
+          email: 'raj.kumar@hdfc.co.in',
+          reviewStatus: 'pending',
+          isSelected: false
+        }
+      ]
+    }
+  ];
+
+  const selectedApplication = userApplications[0];
+  const selectedDSA = selectedApplication.availableDSAs.find(dsa => dsa.isSelected);
+
   const dsaInfo = {
-    name: 'Jane Smith',
+    name: selectedDSA?.name || 'Jane Smith',
     designation: 'Senior DSA',
     bank: 'SBI',
     dsaId: 'SBI238001EMB',
     phone: '+91 9876543210',
-    email: 'jane.smith@sbi.co.in',
+    email: selectedDSA?.email || 'jane.smith@sbi.co.in',
     status: 'online',
     avatar: null,
     specialization: ['Education Loans', 'Personal Loans']
@@ -165,7 +196,55 @@ export default async function UserChatPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 lg:gap-8">
           {/* DSA Info Sidebar */}
-          <div className="lg:col-span-1">
+          <div className="lg:col-span-1 space-y-6">
+            {/* DSA Selection */}
+            {selectedApplication.canSelectDSA && selectedApplication.availableDSAs.length > 1 && (
+              <Card className="bg-white border border-slate-200">
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Users className="h-5 w-5 text-blue-600" />
+                    Select DSA
+                  </CardTitle>
+                  <CardDescription>Choose your preferred DSA for communication</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {selectedApplication.availableDSAs.map((dsa) => (
+                    <div
+                      key={dsa.id}
+                      className={`p-3 rounded-lg border cursor-pointer transition-colors ${
+                        dsa.isSelected
+                          ? 'border-blue-200 bg-blue-50'
+                          : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-medium text-slate-900">{dsa.name}</div>
+                          <div className="text-sm text-slate-600">{dsa.email}</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge className={
+                            dsa.reviewStatus === 'approved'
+                              ? 'bg-green-100 text-green-800'
+                              : dsa.reviewStatus === 'rejected'
+                              ? 'bg-red-100 text-red-800'
+                              : 'bg-yellow-100 text-yellow-800'
+                          }>
+                            {dsa.reviewStatus === 'approved' && <CheckCircle className="h-3 w-3 mr-1" />}
+                            {dsa.reviewStatus === 'rejected' && <XCircle className="h-3 w-3 mr-1" />}
+                            {dsa.reviewStatus === 'pending' && <Clock className="h-3 w-3 mr-1" />}
+                            {dsa.reviewStatus.charAt(0).toUpperCase() + dsa.reviewStatus.slice(1)}
+                          </Badge>
+                          {dsa.isSelected && (
+                            <Badge variant="outline" className="text-xs">Selected</Badge>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
             <Card className="bg-white border border-slate-200">
               <CardHeader>
                 <CardTitle className="text-lg">Your DSA</CardTitle>

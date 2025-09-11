@@ -65,18 +65,36 @@ export interface StatusHistory {
   comments?: string;
 }
 
+export interface DSAReview {
+  dsaId: string;
+  dsaName?: string;
+  dsaEmail?: string;
+  status: 'pending' | 'approved' | 'rejected';
+  comments?: string;
+  reviewedAt?: Date;
+  documentsReviewed: string[];
+  riskAssessment?: {
+    creditScore?: number;
+    riskLevel: 'low' | 'medium' | 'high';
+    recommendations: string[];
+  };
+}
+
 export interface LoanApplication {
   _id: string;
   userId: string;
-  dsaId?: string;
+  dsaId?: string; // Primary DSA (backward compatibility)
+  assignedDSAs: string[]; // Multiple DSAs can review
   applicationNumber: string;
   personalDetails: PersonalDetails;
   loanDetails: LoanDetails;
   documents: Document[];
-  status: 'pending' | 'under_review' | 'approved' | 'rejected';
+  status: 'pending' | 'under_review' | 'approved' | 'rejected' | 'partially_approved';
+  dsaReviews: DSAReview[];
   assignedAt?: Date;
   reviewDeadline?: Date;
   statusHistory: StatusHistory[];
+  finalApprovalThreshold: number;
   createdAt: Date;
   updatedAt: Date;
 }

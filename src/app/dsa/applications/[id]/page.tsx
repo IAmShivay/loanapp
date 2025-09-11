@@ -5,6 +5,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { 
@@ -24,7 +27,8 @@ import {
   MapPin,
   Edit,
   MessageSquare,
-  Eye
+  Eye,
+  Users
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -45,11 +49,12 @@ export default async function DSAApplicationDetailPage({ params }: DSAApplicatio
   const application = {
     id: params.id,
     applicationId: 'LA202412001',
-    status: 'pending_review',
+    status: 'under_review',
     priority: 'high',
     submittedAt: '2024-12-10T10:30:00Z',
     lastUpdated: '2024-12-11T14:20:00Z',
     deadline: '2024-12-13T23:59:59Z',
+    finalApprovalThreshold: 2,
     
     // Applicant Information
     applicant: {
@@ -121,7 +126,50 @@ export default async function DSAApplicationDetailPage({ params }: DSAApplicatio
         timestamp: '2024-12-11T14:20:00Z',
         type: 'dsa'
       }
-    ]
+    ],
+
+    // Multi-DSA Review System
+    assignedDSAs: ['dsa1', 'dsa2', 'dsa3'],
+    dsaReviews: [
+      {
+        dsaId: 'dsa1',
+        dsaName: 'Jane Smith',
+        status: 'pending',
+        comments: null,
+        reviewedAt: null
+      },
+      {
+        dsaId: 'dsa2',
+        dsaName: 'Raj Kumar',
+        status: 'approved',
+        comments: 'Good application. All documents verified.',
+        reviewedAt: '2024-12-11T09:30:00Z'
+      },
+      {
+        dsaId: 'dsa3',
+        dsaName: 'Priya Sharma',
+        status: 'pending',
+        comments: null,
+        reviewedAt: null
+      }
+    ],
+
+    // Current DSA's review status (for this session)
+    currentDSAReview: {
+      dsaId: session.user.id,
+      status: 'pending',
+      comments: null,
+      reviewedAt: null,
+      documentsReviewed: [],
+      riskAssessment: null
+    },
+
+    approvalStatus: {
+      approved: 1,
+      rejected: 0,
+      pending: 2,
+      threshold: 2
+    }
   };
 
   if (!application) {
@@ -501,6 +549,144 @@ export default async function DSAApplicationDetailPage({ params }: DSAApplicatio
                     </div>
                   ))}
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Multi-DSA Review Status */}
+            <Card className="bg-white border border-slate-200">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Users className="h-5 w-5 text-blue-600" />
+                  Multi-DSA Review Status
+                </CardTitle>
+                <CardDescription>
+                  {application.approvalStatus.approved} of {application.approvalStatus.threshold} approvals received
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Progress Overview */}
+                <div className="grid grid-cols-3 gap-4 p-4 bg-slate-50 rounded-lg">
+                  <div className="text-center">
+                    <div className="flex items-center justify-center gap-1 text-green-600 mb-1">
+                      <CheckCircle className="h-4 w-4" />
+                      <span className="font-semibold">{application.approvalStatus.approved}</span>
+                    </div>
+                    <div className="text-xs text-slate-600">Approved</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="flex items-center justify-center gap-1 text-yellow-600 mb-1">
+                      <Clock className="h-4 w-4" />
+                      <span className="font-semibold">{application.approvalStatus.pending}</span>
+                    </div>
+                    <div className="text-xs text-slate-600">Pending</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="flex items-center justify-center gap-1 text-red-600 mb-1">
+                      <XCircle className="h-4 w-4" />
+                      <span className="font-semibold">{application.approvalStatus.rejected}</span>
+                    </div>
+                    <div className="text-xs text-slate-600">Rejected</div>
+                  </div>
+                </div>
+
+                {/* Individual DSA Reviews */}
+                <div className="space-y-3">
+                  <h4 className="font-medium text-slate-900">DSA Reviews:</h4>
+                  {application.dsaReviews.map((review) => (
+                    <div key={review.dsaId} className="flex items-center justify-between p-3 border border-slate-200 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-8 w-8">
+                          <AvatarFallback className="bg-blue-600 text-white text-sm">
+                            {review.dsaName.split(' ').map(n => n[0]).join('')}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <div className="font-medium text-slate-900">{review.dsaName}</div>
+                          {review.reviewedAt && (
+                            <div className="text-xs text-slate-500">
+                              Reviewed on {new Date(review.reviewedAt).toLocaleDateString()}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge className={getStatusColor(review.status)}>
+                          {review.status === 'approved' && <CheckCircle className="h-3 w-3 mr-1" />}
+                          {review.status === 'rejected' && <XCircle className="h-3 w-3 mr-1" />}
+                          {review.status === 'pending' && <Clock className="h-3 w-3 mr-1" />}
+                          {review.status.charAt(0).toUpperCase() + review.status.slice(1)}
+                        </Badge>
+                        {review.dsaId === session.user.id && (
+                          <Badge variant="outline" className="text-xs">You</Badge>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Current DSA's Review Form */}
+                {application.currentDSAReview.status === 'pending' && (
+                  <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <h4 className="font-medium text-blue-900 mb-3">Submit Your Review</h4>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="text-sm font-medium text-slate-700 mb-2 block">Risk Assessment</label>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="text-xs text-slate-600">Credit Score</label>
+                            <Input type="number" placeholder="300-900" min="300" max="900" />
+                          </div>
+                          <div>
+                            <label className="text-xs text-slate-600">Risk Level</label>
+                            <Select>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select risk level" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="low">Low Risk</SelectItem>
+                                <SelectItem value="medium">Medium Risk</SelectItem>
+                                <SelectItem value="high">High Risk</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-slate-700 mb-2 block">Comments</label>
+                        <Textarea
+                          placeholder="Add your detailed review comments..."
+                          rows={3}
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <Button className="flex-1 bg-green-600 hover:bg-green-700">
+                          <CheckCircle className="h-4 w-4 mr-2" />
+                          Approve Application
+                        </Button>
+                        <Button variant="outline" className="flex-1 text-red-600 border-red-200 hover:bg-red-50">
+                          <XCircle className="h-4 w-4 mr-2" />
+                          Reject Application
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Already Reviewed */}
+                {application.currentDSAReview.status !== 'pending' && (
+                  <div className="mt-6 p-4 bg-green-50 rounded-lg border border-green-200">
+                    <div className="flex items-center gap-2 mb-2">
+                      <CheckCircle className="h-5 w-5 text-green-600" />
+                      <h4 className="font-medium text-green-900">Review Submitted</h4>
+                    </div>
+                    <p className="text-sm text-green-700">
+                      You have already reviewed this application.
+                      {application.currentDSAReview.reviewedAt &&
+                        ` Submitted on ${new Date(application.currentDSAReview.reviewedAt).toLocaleDateString()}.`
+                      }
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

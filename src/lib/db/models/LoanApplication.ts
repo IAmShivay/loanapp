@@ -44,20 +44,45 @@ export interface IStatusHistory {
   comments?: string;
 }
 
+export interface IDSAReview {
+  dsaId: mongoose.Types.ObjectId;
+  status: 'pending' | 'approved' | 'rejected';
+  comments?: string;
+  reviewedAt?: Date;
+  documentsReviewed: string[];
+  riskAssessment?: {
+    creditScore?: number;
+    riskLevel: 'low' | 'medium' | 'high';
+    recommendations: string[];
+  };
+}
+
 export interface ILoanApplication extends Document {
   userId: mongoose.Types.ObjectId;
-  dsaId?: mongoose.Types.ObjectId;
+  dsaId?: mongoose.Types.ObjectId; // Primary DSA (for backward compatibility)
+  assignedDSAs: mongoose.Types.ObjectId[]; // Multiple DSAs can review
   applicationNumber: string;
   personalDetails: IPersonalDetails;
   loanDetails: ILoanDetails;
   documents: IDocument[];
-  status: 'pending' | 'under_review' | 'approved' | 'rejected';
+  status: 'pending' | 'under_review' | 'approved' | 'rejected' | 'partially_approved';
+  dsaReviews: IDSAReview[];
   assignedAt?: Date;
   reviewDeadline?: Date;
   statusHistory: IStatusHistory[];
+  finalApprovalThreshold: number; // Number of approvals needed
+
+  // Payment Information
+  paymentStatus: 'pending' | 'completed' | 'failed' | 'refunded';
+  paymentId?: string;
+  serviceChargesPaid: boolean;
+  paidAt?: Date;
+
   createdAt: Date;
   updatedAt: Date;
   generateApplicationNumber(): string;
+  getApprovalStatus(): { approved: number; rejected: number; pending: number };
+  canUserSelectDSA(): boolean;
 }
 
 const PersonalDetailsSchema = new Schema({
@@ -108,6 +133,31 @@ const StatusHistorySchema = new Schema({
   comments: { type: String },
 });
 
+const DSAReviewSchema = new Schema({
+  dsaId: {
+    type: Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  status: {
+    type: String,
+    enum: ['pending', 'approved', 'rejected'],
+    default: 'pending'
+  },
+  comments: { type: String },
+  reviewedAt: { type: Date },
+  documentsReviewed: [{ type: String }],
+  riskAssessment: {
+    creditScore: { type: Number, min: 300, max: 900 },
+    riskLevel: {
+      type: String,
+      enum: ['low', 'medium', 'high'],
+      default: 'medium'
+    },
+    recommendations: [{ type: String }]
+  }
+});
+
 const LoanApplicationSchema = new Schema<ILoanApplication>({
   userId: {
     type: Schema.Types.ObjectId,
@@ -118,6 +168,10 @@ const LoanApplicationSchema = new Schema<ILoanApplication>({
     type: Schema.Types.ObjectId,
     ref: 'User',
   },
+  assignedDSAs: [{
+    type: Schema.Types.ObjectId,
+    ref: 'User',
+  }],
   applicationNumber: {
     type: String,
     unique: true,
@@ -133,9 +187,10 @@ const LoanApplicationSchema = new Schema<ILoanApplication>({
   documents: [DocumentSchema],
   status: {
     type: String,
-    enum: ['pending', 'under_review', 'approved', 'rejected'],
+    enum: ['pending', 'under_review', 'approved', 'rejected', 'partially_approved'],
     default: 'pending',
   },
+  dsaReviews: [DSAReviewSchema],
   assignedAt: {
     type: Date,
   },
@@ -143,6 +198,30 @@ const LoanApplicationSchema = new Schema<ILoanApplication>({
     type: Date,
   },
   statusHistory: [StatusHistorySchema],
+  finalApprovalThreshold: {
+    type: Number,
+    default: 2, // Require 2 DSA approvals by default
+    min: 1,
+    max: 5
+  },
+
+  // Payment Information
+  paymentStatus: {
+    type: String,
+    enum: ['pending', 'completed', 'failed', 'refunded'],
+    default: 'pending'
+  },
+  paymentId: {
+    type: String,
+    sparse: true
+  },
+  serviceChargesPaid: {
+    type: Boolean,
+    default: false
+  },
+  paidAt: {
+    type: Date
+  },
 }, {
   timestamps: true,
 });
@@ -153,6 +232,8 @@ LoanApplicationSchema.index({ dsaId: 1 });
 LoanApplicationSchema.index({ status: 1 });
 LoanApplicationSchema.index({ applicationNumber: 1 });
 LoanApplicationSchema.index({ reviewDeadline: 1 });
+LoanApplicationSchema.index({ paymentStatus: 1 });
+LoanApplicationSchema.index({ paymentId: 1 });
 LoanApplicationSchema.index({ createdAt: -1 });
 
 // Pre-save middleware to generate application number
@@ -172,7 +253,23 @@ LoanApplicationSchema.methods.generateApplicationNumber = function(): string {
   return `LA${year}${month}${timestamp}${random}`;
 };
 
-// Pre-save middleware to add status history
+// Method to get approval status
+LoanApplicationSchema.methods.getApprovalStatus = function() {
+  const approved = this.dsaReviews.filter((review: IDSAReview) => review.status === 'approved').length;
+  const rejected = this.dsaReviews.filter((review: IDSAReview) => review.status === 'rejected').length;
+  const pending = this.dsaReviews.filter((review: IDSAReview) => review.status === 'pending').length;
+
+  return { approved, rejected, pending };
+};
+
+// Method to check if user can select DSA for chat
+LoanApplicationSchema.methods.canUserSelectDSA = function() {
+  // User can select DSA if at least one DSA has approved or if application is under review
+  const { approved } = this.getApprovalStatus();
+  return approved > 0 || this.status === 'under_review';
+};
+
+// Pre-save middleware to add status history and update overall status
 LoanApplicationSchema.pre('save', function(next) {
   if (this.isModified('status')) {
     this.statusHistory.push({
@@ -181,6 +278,24 @@ LoanApplicationSchema.pre('save', function(next) {
       updatedAt: new Date(),
     });
   }
+
+  // Auto-update overall status based on DSA reviews
+  if (this.isModified('dsaReviews')) {
+    const { approved, rejected, pending } = this.getApprovalStatus();
+    const totalReviews = this.dsaReviews.length;
+
+    if (approved >= this.finalApprovalThreshold) {
+      this.status = 'approved';
+    } else if (rejected > 0 && (rejected + approved) === totalReviews) {
+      // All DSAs have reviewed and at least one rejected
+      this.status = 'rejected';
+    } else if (approved > 0 && pending > 0) {
+      this.status = 'partially_approved';
+    } else if (totalReviews > 0 && pending === totalReviews) {
+      this.status = 'under_review';
+    }
+  }
+
   next();
 });
 

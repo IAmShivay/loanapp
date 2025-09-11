@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
-import { ArrowLeft, ArrowRight, Save, Send, Upload, FileText, AlertCircle, CheckCircle } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Save, Send, Upload, FileText, AlertCircle, CheckCircle, CreditCard, Shield, Clock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { z } from 'zod';
 
@@ -73,7 +73,7 @@ export default function NewApplicationPage() {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const totalSteps = 6;
+  const totalSteps = 7;
   const progress = (currentStep / totalSteps) * 100;
 
   const stepTitles = [
@@ -82,6 +82,7 @@ export default function NewApplicationPage() {
     'Education Information',
     'Loan Details',
     'Financial Information',
+    'Payment Information',
     'Review & Submit'
   ];
 
@@ -128,6 +129,9 @@ export default function NewApplicationPage() {
         if (!formData.employmentType) stepErrors.employmentType = 'Employment type is required';
         if (!formData.employerName) stepErrors.employerName = 'Employer name is required';
         break;
+      case 6: // Payment Information
+        // Payment step validation (if needed)
+        break;
     }
 
     setErrors(stepErrors);
@@ -149,12 +153,12 @@ export default function NewApplicationPage() {
 
     try {
       setIsSubmitting(true);
-      
+
       // Validate entire form
       const validatedData = applicationSchema.parse(formData);
-      
-      // TODO: Replace with actual API call
-      const response = await fetch('/api/applications', {
+
+      // Step 1: Create application
+      const applicationResponse = await fetch('/api/applications', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -162,18 +166,40 @@ export default function NewApplicationPage() {
         body: JSON.stringify(validatedData),
       });
 
-      if (!response.ok) {
+      if (!applicationResponse.ok) {
         throw new Error('Failed to submit application');
       }
 
-      const result = await response.json();
-      
-      toast({
-        title: "Application Submitted Successfully!",
-        description: `Your application ID is ${result.applicationId}. You will receive updates via email.`,
+      const applicationResult = await applicationResponse.json();
+
+      // Step 2: Initiate payment for service charge
+      const paymentResponse = await fetch('/api/payments/initiate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          applicationId: applicationResult.applicationId,
+          amount: 99,
+          currency: 'INR',
+          paymentMethod: 'card', // Default, user can change on payment page
+          returnUrl: `${window.location.origin}/user/applications`
+        }),
       });
 
-      router.push('/user/applications');
+      if (!paymentResponse.ok) {
+        throw new Error('Failed to initiate payment');
+      }
+
+      const paymentResult = await paymentResponse.json();
+
+      toast({
+        title: "Application Created Successfully!",
+        description: `Application ID: ${applicationResult.applicationId}. Redirecting to payment...`,
+      });
+
+      // Redirect to payment page
+      router.push(paymentResult.payment.paymentUrl);
     } catch (error) {
       if (error instanceof z.ZodError) {
         const fieldErrors: Record<string, string> = {};
@@ -545,6 +571,84 @@ export default function NewApplicationPage() {
       case 6:
         return (
           <div className="space-y-6">
+            {/* Service Charge Information */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
+                  <CreditCard className="h-6 w-6 text-white" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-blue-900 mb-2">Service Charge Required</h3>
+                  <p className="text-blue-800 mb-4">
+                    A one-time service charge of ₹99 is required to process your education loan application.
+                    This fee covers application processing, document verification, and initial assessment.
+                  </p>
+                  <div className="bg-white rounded-lg p-4 border border-blue-200">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-slate-600">Application Processing Fee</span>
+                      <span className="font-semibold text-slate-900">₹99</span>
+                    </div>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-slate-600">Payment Gateway Charges</span>
+                      <span className="font-semibold text-slate-900">₹0</span>
+                    </div>
+                    <div className="border-t pt-2 mt-2">
+                      <div className="flex justify-between items-center">
+                        <span className="font-semibold text-slate-900">Total Amount</span>
+                        <span className="font-bold text-lg text-blue-600">₹99</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Payment Security Information */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="flex items-center gap-3 p-4 bg-green-50 rounded-lg border border-green-200">
+                <Shield className="h-8 w-8 text-green-600" />
+                <div>
+                  <h4 className="font-medium text-green-900">Secure Payment</h4>
+                  <p className="text-sm text-green-700">256-bit SSL encrypted</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 p-4 bg-orange-50 rounded-lg border border-orange-200">
+                <Clock className="h-8 w-8 text-orange-600" />
+                <div>
+                  <h4 className="font-medium text-orange-900">Instant Processing</h4>
+                  <p className="text-sm text-orange-700">Immediate confirmation</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 p-4 bg-purple-50 rounded-lg border border-purple-200">
+                <CheckCircle className="h-8 w-8 text-purple-600" />
+                <div>
+                  <h4 className="font-medium text-purple-900">Multiple Options</h4>
+                  <p className="text-sm text-purple-700">Card, UPI, Net Banking</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Important Notes */}
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5" />
+                <div>
+                  <h4 className="font-medium text-yellow-900 mb-2">Important Information</h4>
+                  <ul className="text-sm text-yellow-800 space-y-1">
+                    <li>• This is a one-time, non-refundable service charge</li>
+                    <li>• Payment is required to proceed with application processing</li>
+                    <li>• You will receive a payment confirmation via email and SMS</li>
+                    <li>• Your application will be assigned to DSAs only after successful payment</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+
+      case 7:
+        return (
+          <div className="space-y-6">
             {/* Application Summary */}
             <div className="bg-slate-50 p-4 rounded-lg">
               <h3 className="font-semibold text-slate-900 mb-3">Application Summary</h3>
@@ -657,7 +761,9 @@ export default function NewApplicationPage() {
           <CardHeader className="border-b border-slate-100">
             <CardTitle>{stepTitles[currentStep - 1]}</CardTitle>
             <CardDescription>
-              {currentStep === 6 
+              {currentStep === 6
+                ? 'Service charge information and payment details'
+                : currentStep === 7
                 ? 'Review your information and submit your application'
                 : 'Please fill in all required fields marked with *'
               }

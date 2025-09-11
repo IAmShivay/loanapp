@@ -182,8 +182,13 @@ export async function POST(request: NextRequest) {
         annualIncome: validatedData.coApplicantIncome
       } : undefined,
       status: 'pending',
-      priority: validatedData.loanAmount > 1000000 ? 'high' : 
+      priority: validatedData.loanAmount > 1000000 ? 'high' :
                 validatedData.loanAmount > 500000 ? 'medium' : 'low',
+
+      // Payment Information
+      paymentStatus: 'pending',
+      serviceChargesPaid: false,
+
       documentsRequired: [
         'aadhar_card',
         'pan_card',
