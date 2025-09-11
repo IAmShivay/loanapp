@@ -516,12 +516,7 @@ export const apiSlice = createApi({
       invalidatesTags: ['Users'],
     }),
 
-    // Application-specific endpoints
-    getApplication: builder.query<{ application: unknown }, string>({
-      query: (applicationId) => `applications/${applicationId}`,
-      providesTags: ['Applications'],
-    }),
-
+    // Application documents endpoint
     getApplicationDocuments: builder.query<{ documents: unknown[] }, string>({
       query: (applicationId) => `applications/${applicationId}/documents`,
       providesTags: ['Files'],
@@ -609,7 +604,26 @@ export const apiSlice = createApi({
     }),
 
     // Admin analytics endpoints
-    getAnalytics: builder.query<{ analytics: unknown }, { timeRange?: string }>({
+    getAnalytics: builder.query<{ analytics: {
+      overview: {
+        totalApplications: number;
+        totalUsers: number;
+        totalLoanAmount: number;
+        approvalRate: number;
+        avgLoanAmount: number;
+      };
+      trends: {
+        applicationTrends: any[];
+        statusDistribution: any[];
+        loanAmountDistribution: any[];
+      };
+      performance: {
+        dsaPerformance: any[];
+        recentApplications: any[];
+      };
+      timeRange: string;
+      generatedAt: string;
+    } }, { timeRange?: string }>({
       query: (params) => ({
         url: 'admin/analytics',
         params,
@@ -635,14 +649,90 @@ export const apiSlice = createApi({
     }),
 
     // Admin settings endpoints
-    getSettings: builder.query<{ settings: unknown }, void>({
+    getSettings: builder.query<{ settings: {
+      general: {
+        siteName: string;
+        siteDescription: string;
+        supportEmail: string;
+        maxFileSize: number;
+        allowedFileTypes: string[];
+        maintenanceMode: boolean;
+      };
+      email: {
+        smtpHost: string;
+        smtpPort: number;
+        smtpUser: string;
+        smtpPassword: string;
+        fromEmail: string;
+        fromName: string;
+        emailEnabled: boolean;
+      };
+      notifications: {
+        emailNotifications: boolean;
+        smsNotifications: boolean;
+        pushNotifications: boolean;
+        adminAlerts: boolean;
+      };
+      security: {
+        passwordMinLength: number;
+        sessionTimeout: number;
+        maxLoginAttempts: number;
+        twoFactorAuth: boolean;
+        ipWhitelist: string[];
+      };
+      loan: {
+        minLoanAmount: number;
+        maxLoanAmount: number;
+        defaultInterestRate: number;
+        processingFee: number;
+        autoApprovalLimit: number;
+      };
+    } }, void>({
       query: () => ({
         url: 'admin/settings',
       }),
       providesTags: ['Settings'],
     }),
 
-    updateSettings: builder.mutation<{ settings: unknown }, unknown>({
+    updateSettings: builder.mutation<{ settings: {
+      general: {
+        siteName: string;
+        siteDescription: string;
+        supportEmail: string;
+        maxFileSize: number;
+        allowedFileTypes: string[];
+        maintenanceMode: boolean;
+      };
+      email: {
+        smtpHost: string;
+        smtpPort: number;
+        smtpUser: string;
+        smtpPassword: string;
+        fromEmail: string;
+        fromName: string;
+        emailEnabled: boolean;
+      };
+      notifications: {
+        emailNotifications: boolean;
+        smsNotifications: boolean;
+        pushNotifications: boolean;
+        adminAlerts: boolean;
+      };
+      security: {
+        passwordMinLength: number;
+        sessionTimeout: number;
+        maxLoginAttempts: number;
+        twoFactorAuth: boolean;
+        ipWhitelist: string[];
+      };
+      loan: {
+        minLoanAmount: number;
+        maxLoanAmount: number;
+        defaultInterestRate: number;
+        processingFee: number;
+        autoApprovalLimit: number;
+      };
+    } }, unknown>({
       query: (settings) => ({
         url: 'admin/settings',
         method: 'PUT',
@@ -651,7 +741,45 @@ export const apiSlice = createApi({
       invalidatesTags: ['Settings'],
     }),
 
-    resetSettings: builder.mutation<{ settings: unknown }, void>({
+    resetSettings: builder.mutation<{ settings: {
+      general: {
+        siteName: string;
+        siteDescription: string;
+        supportEmail: string;
+        maxFileSize: number;
+        allowedFileTypes: string[];
+        maintenanceMode: boolean;
+      };
+      email: {
+        smtpHost: string;
+        smtpPort: number;
+        smtpUser: string;
+        smtpPassword: string;
+        fromEmail: string;
+        fromName: string;
+        emailEnabled: boolean;
+      };
+      notifications: {
+        emailNotifications: boolean;
+        smsNotifications: boolean;
+        pushNotifications: boolean;
+        adminAlerts: boolean;
+      };
+      security: {
+        passwordMinLength: number;
+        sessionTimeout: number;
+        maxLoginAttempts: number;
+        twoFactorAuth: boolean;
+        ipWhitelist: string[];
+      };
+      loan: {
+        minLoanAmount: number;
+        maxLoanAmount: number;
+        defaultInterestRate: number;
+        processingFee: number;
+        autoApprovalLimit: number;
+      };
+    } }, void>({
       query: () => ({
         url: 'admin/settings',
         method: 'POST',
@@ -696,7 +824,6 @@ export const {
   useGetEmailTemplatesQuery,
   useGetUserProfileQuery,
   useUpdateUserProfileMutation,
-  useGetApplicationQuery,
   useGetApplicationDocumentsQuery,
   useGetSupportTicketsQuery,
   useGetSupportTicketQuery,

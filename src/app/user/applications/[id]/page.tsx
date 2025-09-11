@@ -32,7 +32,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import Link from 'next/link';
-import { useGetApplicationQuery, useGetApplicationDocumentsQuery } from '@/store/api/apiSlice';
+import { useGetApplicationByIdQuery, useGetApplicationDocumentsQuery } from '@/store/api/apiSlice';
 import { SkeletonCard } from '@/components/ui/loading/SkeletonCard';
 import { formatFullCurrency, formatLoanAmount } from '@/lib/utils/currency';
 import { safeApplication } from '@/lib/utils/fallbacks';
@@ -59,7 +59,7 @@ export default function ApplicationDetailPage() {
     isLoading, 
     error,
     refetch 
-  } = useGetApplicationQuery(applicationId);
+  } = useGetApplicationByIdQuery(applicationId);
 
   // Fetch application documents
   const { 

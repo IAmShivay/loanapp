@@ -37,9 +37,33 @@ function ChatPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const applicationId = searchParams.get('applicationId');
-  
+
+  // All hooks must be called before any conditional returns
   const [selectedChat, setSelectedChat] = useState<string | null>(null);
   const [selectedApplication, setSelectedApplication] = useState<string | null>(applicationId);
+
+  // Fetch user's chats - use conditional query based on session
+  const {
+    data: chatsData,
+    isLoading: isLoadingChats,
+    error: chatsError,
+    refetch: refetchChats
+  } = useGetChatsQuery({ userId: session?.user?.id || '' }, {
+    skip: !session?.user?.id
+  });
+
+  // Fetch user's applications (for creating new chats)
+  const {
+    data: applicationsData,
+    isLoading: isLoadingApplications
+  } = useGetApplicationsQuery({
+    userId: session?.user?.id || '',
+    status: 'partially_approved' // Only show applications that can have chats
+  }, {
+    skip: !session?.user?.id
+  });
+
+  const [createChat] = useCreateChatMutation();
 
   // Redirect if not authenticated
   if (status === 'loading') {
@@ -50,25 +74,6 @@ function ChatPageContent() {
     router.push('/login');
     return null;
   }
-
-  // Fetch user's chats
-  const { 
-    data: chatsData, 
-    isLoading: isLoadingChats, 
-    error: chatsError,
-    refetch: refetchChats 
-  } = useGetChatsQuery({ userId: session.user.id });
-
-  // Fetch user's applications (for creating new chats)
-  const { 
-    data: applicationsData, 
-    isLoading: isLoadingApplications 
-  } = useGetApplicationsQuery({ 
-    userId: session.user.id,
-    status: 'partially_approved' // Only show applications that can have chats
-  });
-
-  const [createChat] = useCreateChatMutation();
 
   const chats = chatsData?.chats || [];
   const applications = applicationsData?.applications || [];

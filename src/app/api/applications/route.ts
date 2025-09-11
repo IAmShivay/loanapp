@@ -75,7 +75,7 @@ export async function GET(request: NextRequest) {
 
     const applications = await LoanApplication.find(query)
       .populate('userId', 'firstName lastName email phone')
-      .populate('assignedDSA', 'firstName lastName email bank dsaId')
+      .populate('assignedDSAs', 'firstName lastName email bank dsaId')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);

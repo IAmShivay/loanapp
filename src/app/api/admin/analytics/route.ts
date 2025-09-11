@@ -127,7 +127,7 @@ export async function GET(request: NextRequest) {
         .lean()
     ]);
 
-    logDbOperation('read', 'analytics', true, { timeRange, totalApplications, totalUsers });
+    logDbOperation('read', 'analytics', true, undefined, { timeRange, totalApplications, totalUsers });
 
     // Process status distribution
     const statusDistribution = [
@@ -245,7 +245,7 @@ export async function POST(request: NextRequest) {
 
     if (action === 'export') {
       // Generate export data
-      logDbOperation('read', 'analytics_export', true, { filters });
+      logDbOperation('read', 'analytics_export', true, undefined, { filters });
       
       const duration = Date.now() - startTime;
       logApiResponse(method, url, 200, duration, session.user.id);
@@ -259,7 +259,7 @@ export async function POST(request: NextRequest) {
 
     if (action === 'refresh') {
       // Refresh analytics cache
-      logDbOperation('update', 'analytics_cache', true, { action: 'refresh' });
+      logDbOperation('update', 'analytics_cache', true, undefined, { action: 'refresh' });
       
       const duration = Date.now() - startTime;
       logApiResponse(method, url, 200, duration, session.user.id);

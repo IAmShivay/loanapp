@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
+import { getServerSession, Session } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { connectDB } from '@/lib/db/connection';
 import LoanApplication from '@/lib/db/models/LoanApplication';
@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
   const startTime = Date.now();
   const method = 'POST';
   const url = '/api/applications/with-files';
-  let session: Awaited<ReturnType<typeof getServerSession>> = null;
+  let session: Session | null = null;
 
   try {
     // Check authentication

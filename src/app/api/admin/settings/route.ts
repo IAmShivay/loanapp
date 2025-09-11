@@ -154,7 +154,7 @@ export async function PUT(request: NextRequest) {
     //   { upsert: true, new: true }
     // );
 
-    logDbOperation('update', 'settings', true, { settingsUpdated: Object.keys(validatedData).length });
+    logDbOperation('update', 'settings', true, undefined, { settingsUpdated: Object.keys(validatedData).length });
 
     const duration = Date.now() - startTime;
     logApiResponse(method, url, 200, duration, session.user.id);
@@ -172,7 +172,7 @@ export async function PUT(request: NextRequest) {
       logError('Settings validation failed', error, { url, method });
       logApiResponse(method, url, 400, duration);
       return NextResponse.json(
-        { error: 'Invalid settings data', details: error.errors },
+        { error: 'Invalid settings data', details: error.issues },
         { status: 400 }
       );
     }
@@ -208,7 +208,7 @@ export async function POST(request: NextRequest) {
 
     if (action === 'reset') {
       // Reset to default settings
-      logDbOperation('update', 'settings', true, { action: 'reset' });
+      logDbOperation('update', 'settings', true, undefined, { action: 'reset' });
       
       const duration = Date.now() - startTime;
       logApiResponse(method, url, 200, duration, session.user.id);
@@ -222,7 +222,7 @@ export async function POST(request: NextRequest) {
 
     if (action === 'backup') {
       // Create settings backup
-      logDbOperation('create', 'settings_backup', true, { action: 'backup' });
+      logDbOperation('create', 'settings_backup', true, undefined, { action: 'backup' });
       
       const duration = Date.now() - startTime;
       logApiResponse(method, url, 200, duration, session.user.id);

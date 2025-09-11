@@ -16,6 +16,34 @@ export interface IUser extends Document {
   verifiedAt?: Date;
   profilePicture?: string;
   lastLogin?: Date;
+
+  // Personal Information
+  dateOfBirth?: Date;
+  address?: string;
+  aadharNumber?: string;
+  panNumber?: string;
+
+  // Education Information
+  currentInstitution?: string;
+  course?: string;
+  duration?: string;
+  feeStructure?: number;
+  admissionDate?: Date;
+
+  // Financial Information
+  annualIncome?: number;
+  employmentType?: string;
+  employerName?: string;
+  workExperience?: string;
+
+  // Documents
+  documents?: Array<{
+    type: 'Aadhar' | 'PAN' | 'Income Certificate' | 'Bank Statement' | 'Education Certificate' | 'Other';
+    fileName: string;
+    filePath: string;
+    uploadedAt: Date;
+  }>;
+
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
@@ -91,6 +119,67 @@ const UserSchema = new Schema<IUser>({
   lastLogin: {
     type: Date,
   },
+
+  // Personal Information
+  dateOfBirth: {
+    type: Date,
+  },
+  address: {
+    type: String,
+  },
+  aadharNumber: {
+    type: String,
+  },
+  panNumber: {
+    type: String,
+  },
+
+  // Education Information
+  currentInstitution: {
+    type: String,
+  },
+  course: {
+    type: String,
+  },
+  duration: {
+    type: String,
+  },
+  feeStructure: {
+    type: Number,
+    default: 0,
+  },
+  admissionDate: {
+    type: Date,
+  },
+
+  // Financial Information
+  annualIncome: {
+    type: Number,
+    default: 0,
+  },
+  employmentType: {
+    type: String,
+  },
+  employerName: {
+    type: String,
+  },
+  workExperience: {
+    type: String,
+  },
+
+  // Documents
+  documents: [{
+    type: {
+      type: String,
+      enum: ['Aadhar', 'PAN', 'Income Certificate', 'Bank Statement', 'Education Certificate', 'Other']
+    },
+    fileName: String,
+    filePath: String,
+    uploadedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
 }, {
   timestamps: true,
 });

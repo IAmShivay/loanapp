@@ -30,7 +30,7 @@ import {
   useCreateSupportTicketMutation,
   useAddSupportTicketMessageMutation
 } from '@/store/api/apiSlice';
-import LoadingSpinner from '@/components/common/LoadingSpinner';
+import { Skeleton } from '@/components/ui/skeleton';
 import { safeString, safeDate, safeTimeAgo } from '@/lib/utils/fallbacks';
 import { toast } from 'sonner';
 
@@ -38,15 +38,7 @@ export default function UserSupportPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
 
-  if (status === 'loading') {
-    return <LoadingSpinner />;
-  }
-
-  if (!session?.user || session.user.role !== 'user') {
-    router.push('/login');
-    return null;
-  }
-
+  // All hooks must be called before any conditional returns
   const [statusFilter, setStatusFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -56,6 +48,23 @@ export default function UserSupportPage() {
     category: 'general' as const,
     priority: 'medium' as const
   });
+
+  if (status === 'loading') {
+    return (
+      <DashboardLayout>
+        <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+          <Skeleton className="h-8 w-64" />
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-64 w-full" />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!session?.user || session.user.role !== 'user') {
+    router.push('/login');
+    return null;
+  }
 
   // RTK Query hooks
   const {
@@ -158,7 +167,11 @@ export default function UserSupportPage() {
   if (ticketsLoading) {
     return (
       <DashboardLayout>
-        <LoadingSpinner />
+        <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+          <Skeleton className="h-8 w-64" />
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-64 w-full" />
+        </div>
       </DashboardLayout>
     );
   }
