@@ -3,6 +3,7 @@ import { getAuthSession } from '@/lib/auth/utils';
 import connectDB from '@/lib/db/connection';
 import LoanApplication from '@/lib/db/models/LoanApplication';
 import { z } from 'zod';
+import { logApiRequest, logApiResponse, logError, logDbOperation } from '@/lib/logger';
 
 // Validation schema for creating new application
 const createApplicationSchema = z.object({

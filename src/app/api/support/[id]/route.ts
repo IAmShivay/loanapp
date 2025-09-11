@@ -22,16 +22,16 @@ export async function GET(
       .populate('userId', 'firstName lastName email role')
       .populate('assignedTo', 'firstName lastName email')
       .populate('messages.senderId', 'firstName lastName email role')
-      .lean();
+      .lean() as any;
 
     if (!ticket) {
       return NextResponse.json({ error: 'Ticket not found' }, { status: 404 });
     }
 
     // Check permissions
-    const canView = session.user.role === 'admin' || 
+    const canView = session.user.role === 'admin' ||
                    (session.user.role === 'dsa' && ticket.assignedTo?._id?.toString() === session.user.id) ||
-                   (session.user.role === 'user' && ticket.userId._id?.toString() === session.user.id);
+                   (session.user.role === 'user' && ticket.userId?._id?.toString() === session.user.id);
 
     if (!canView) {
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });

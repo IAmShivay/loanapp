@@ -43,9 +43,14 @@ export async function uploadToCloudinary(
 
   try {
     // Convert buffer to base64 data URL if it's a buffer
-    const fileToUpload = Buffer.isBuffer(file)
-      ? `data:image/jpeg;base64,${file.toString('base64')}`
-      : file;
+    let fileToUpload: string;
+
+    if (Buffer.isBuffer(file)) {
+      // For auto resource type, let Cloudinary detect the file type
+      fileToUpload = `data:application/octet-stream;base64,${file.toString('base64')}`;
+    } else {
+      fileToUpload = file;
+    }
 
     const result = await cloudinary.uploader.upload(fileToUpload, {
       folder,

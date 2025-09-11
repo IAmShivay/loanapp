@@ -64,8 +64,8 @@ export default function UserSupportPage() {
     error: ticketsError,
     refetch: refetchTickets
   } = useGetSupportTicketsQuery({
-    status: statusFilter || undefined,
-    category: categoryFilter || undefined,
+    status: statusFilter && statusFilter !== 'all' ? statusFilter : undefined,
+    category: categoryFilter && categoryFilter !== 'all' ? categoryFilter : undefined,
     limit: 20,
     page: 1
   });
@@ -338,7 +338,7 @@ export default function UserSupportPage() {
                         <SelectValue placeholder="Filter by status" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">All Status</SelectItem>
+                        <SelectItem value="all">All Status</SelectItem>
                         <SelectItem value="open">Open</SelectItem>
                         <SelectItem value="in_progress">In Progress</SelectItem>
                         <SelectItem value="resolved">Resolved</SelectItem>
@@ -352,7 +352,7 @@ export default function UserSupportPage() {
                         <SelectValue placeholder="Filter by category" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">All Categories</SelectItem>
+                        <SelectItem value="all">All Categories</SelectItem>
                         <SelectItem value="technical">Technical</SelectItem>
                         <SelectItem value="general">General</SelectItem>
                         <SelectItem value="billing">Billing</SelectItem>

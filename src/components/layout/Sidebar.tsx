@@ -168,7 +168,21 @@ export default function Sidebar({ isOpen, onClose, userRole }: SidebarProps) {
   };
 
   const NavItemComponent = ({ item }: { item: NavItem }) => {
-    const isActive = pathname === item.href;
+    // Precise active state detection to prevent multiple active tabs
+    const isActive = (() => {
+      // Exact match
+      if (pathname === item.href) return true;
+
+      // For nested routes, check if current path starts with item href + '/'
+      // but exclude root paths to prevent conflicts
+      if (item.href !== '/' && item.href !== '/admin' && item.href !== '/dsa' && item.href !== '/user') {
+        return pathname.startsWith(item.href + '/');
+      }
+
+      // For root dashboard paths, only match exactly
+      return false;
+    })();
+
     const isExpanded = expandedItems.includes(item.name);
     const hasChildren = item.children && item.children.length > 0;
 

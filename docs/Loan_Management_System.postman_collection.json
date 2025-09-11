@@ -705,6 +705,116 @@
       ]
     },
     {
+      "name": "Support Tickets",
+      "item": [
+        {
+          "name": "Get Support Tickets",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/support?status=open&category=technical&priority=high&limit=20&page=1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "support"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "open",
+                  "description": "Filter by status: open, in_progress, resolved, closed"
+                },
+                {
+                  "key": "category",
+                  "value": "technical",
+                  "description": "Filter by category: technical, general, billing, process, other"
+                },
+                {
+                  "key": "priority",
+                  "value": "high",
+                  "description": "Filter by priority: low, medium, high"
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Number of tickets per page"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Support Ticket",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subject\": \"Unable to upload documents\",\n  \"description\": \"I am facing issues while uploading my Aadhar card. The upload keeps failing.\",\n  \"category\": \"technical\",\n  \"priority\": \"medium\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/support",
+              "host": ["{{base_url}}"],
+              "path": ["api", "support"]
+            }
+          }
+        },
+        {
+          "name": "Get Support Ticket by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/support/{{ticket_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "support", "{{ticket_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Add Message to Ticket",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"I have tried clearing my browser cache but the issue persists.\",\n  \"attachments\": [\n    {\n      \"fileName\": \"screenshot.png\",\n      \"fileUrl\": \"https://res.cloudinary.com/example/screenshot.png\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/support/{{ticket_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "support", "{{ticket_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete Support Ticket",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/support/{{ticket_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "support", "{{ticket_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
       "name": "Email System",
       "item": [
         {

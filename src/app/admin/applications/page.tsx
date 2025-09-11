@@ -44,7 +44,7 @@ export default function AdminApplicationsPage() {
     error: applicationsError,
     refetch: refetchApplications
   } = useGetApplicationsQuery({
-    status: statusFilter || undefined,
+    status: statusFilter && statusFilter !== 'all' ? statusFilter : undefined,
     search: searchTerm || undefined,
     limit: 50,
     page: 1

@@ -45,9 +45,9 @@ export default function AdminSupportPage() {
     error: ticketsError,
     refetch: refetchTickets
   } = useGetSupportTicketsQuery({
-    status: statusFilter || undefined,
-    category: categoryFilter || undefined,
-    priority: priorityFilter || undefined,
+    status: statusFilter && statusFilter !== 'all' ? statusFilter : undefined,
+    category: categoryFilter && categoryFilter !== 'all' ? categoryFilter : undefined,
+    priority: priorityFilter && priorityFilter !== 'all' ? priorityFilter : undefined,
     limit: 50,
     page: 1
   });

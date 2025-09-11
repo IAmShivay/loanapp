@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { connectDB, User } from '@/lib/db';
 import { validatePassword } from '@/lib/auth/utils';
 import { z } from 'zod';
+import { logApiRequest, logApiResponse, logError, logAuthOperation, logDbOperation } from '@/lib/logger';
 
 const registerSchema = z.object({
   email: z.string().email('Invalid email format'),

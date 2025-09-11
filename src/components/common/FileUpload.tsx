@@ -23,6 +23,7 @@ export interface FileUploadProps {
   onFilesChange?: (files: any[]) => void;
   required?: boolean;
   disabled?: boolean;
+  localMode?: boolean; // New prop for collecting files without immediate upload
 }
 
 export default function FileUpload({
@@ -33,8 +34,10 @@ export default function FileUpload({
   onFilesChange,
   required = false,
   disabled = false,
+  localMode = false,
 }: FileUploadProps) {
   const [files, setFiles] = useState(existingFiles);
+  const [localFiles, setLocalFiles] = useState<File[]>([]); // For local mode
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [dragActive, setDragActive] = useState(false);
@@ -109,12 +112,15 @@ export default function FileUpload({
     if (disabled) return;
 
     const fileArray = Array.from(selectedFiles);
-    
+    const currentFileCount = localMode ? localFiles.length : files.length;
+
     // Check file count limit
-    if (files.length + fileArray.length > maxFiles) {
+    if (currentFileCount + fileArray.length > maxFiles) {
       toast.error(`Maximum ${maxFiles} file(s) allowed`);
       return;
     }
+
+    const validFiles: File[] = [];
 
     for (const file of fileArray) {
       // Validate file size
@@ -130,9 +136,25 @@ export default function FileUpload({
         continue;
       }
 
-      await uploadFileToServer(file);
+      validFiles.push(file);
     }
-  }, [files, maxFiles, config, disabled]);
+
+    if (localMode) {
+      // In local mode, just collect files without uploading
+      const newLocalFiles = [...localFiles, ...validFiles];
+      setLocalFiles(newLocalFiles);
+      onFilesChange?.(newLocalFiles);
+
+      validFiles.forEach(file => {
+        toast.success(`${file.name} added successfully`);
+      });
+    } else {
+      // In server mode, upload files immediately
+      for (const file of validFiles) {
+        await uploadFileToServer(file);
+      }
+    }
+  }, [files, localFiles, maxFiles, config, disabled, localMode, onFilesChange]);
 
   const uploadFileToServer = async (file: File) => {
     try {
@@ -180,6 +202,13 @@ export default function FileUpload({
     } catch (error: any) {
       toast.error(error?.data?.error || 'Failed to delete file');
     }
+  };
+
+  const handleLocalFileRemove = (index: number) => {
+    const newLocalFiles = localFiles.filter((_, i) => i !== index);
+    setLocalFiles(newLocalFiles);
+    onFilesChange?.(newLocalFiles);
+    toast.success('File removed successfully');
   };
 
   const handleDrag = useCallback((e: React.DragEvent) => {
@@ -348,8 +377,47 @@ export default function FileUpload({
         </div>
       )}
 
+      {/* Local Files List (for local mode) */}
+      {localMode && localFiles.length > 0 && (
+        <div className="space-y-2">
+          <h4 className="text-sm font-medium text-gray-900">Selected Files</h4>
+          {localFiles.map((file, index) => (
+            <Card key={`${file.name}-${index}`} className="border border-gray-200">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <span className="text-2xl">{getFileIcon(file.name)}</span>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{file.name}</p>
+                      <p className="text-xs text-gray-500">
+                        {formatFileSize(file.size)} • {file.type}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Badge variant="outline">
+                      Ready to upload
+                    </Badge>
+                    {!disabled && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleLocalFileRemove(index)}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
       {/* Validation Message */}
-      {required && files.length === 0 && (
+      {required && (localMode ? localFiles.length === 0 : files.length === 0) && (
         <div className="flex items-center space-x-2 text-red-600">
           <AlertCircle className="h-4 w-4" />
           <span className="text-sm">This document is required</span>

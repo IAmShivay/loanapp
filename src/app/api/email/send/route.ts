@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth/config';
 import { sendEmail } from '@/lib/email/service';
 import * as templates from '@/lib/email/templates';
+import { logApiRequest, logApiResponse, logError, logEmailOperation } from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
   try {

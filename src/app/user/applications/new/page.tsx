@@ -17,8 +17,8 @@ import { Separator } from '@/components/ui/separator';
 import { ArrowLeft, ArrowRight, Save, Send, Upload, FileText, AlertCircle, CheckCircle, CreditCard, Shield, Clock, User, GraduationCap, DollarSign, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatFullCurrency, formatLoanAmount } from '@/lib/utils/currency';
-import FileUpload from '@/components/common/FileUpload';
-import { useCreateApplicationMutation } from '@/store/api/apiSlice';
+
+import { useCreateApplicationWithFilesMutation } from '@/store/api/apiSlice';
 
 interface FormData {
   // Personal Information
@@ -109,9 +109,9 @@ export default function NewLoanApplication() {
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState<FormData>(initialFormData);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [uploadedFiles, setUploadedFiles] = useState<Record<string, any[]>>({});
+  const [uploadedFiles, setUploadedFiles] = useState<Record<string, File[]>>({});
   
-  const [createApplication, { isLoading: isSubmitting }] = useCreateApplicationMutation();
+  const [createApplicationWithFiles, { isLoading: isSubmitting }] = useCreateApplicationWithFilesMutation();
 
   // Redirect if not authenticated
   if (!session) {
@@ -196,6 +196,10 @@ export default function NewLoanApplication() {
     if (!validateStep(5)) return;
 
     try {
+      // Create FormData for multipart/form-data submission
+      const formDataToSubmit = new FormData();
+
+      // Add application data as JSON string
       const applicationData = {
         personalInfo: {
           firstName: formData.firstName,
@@ -234,20 +238,41 @@ export default function NewLoanApplication() {
           relation: formData.coApplicantRelation,
           annualIncome: formData.coApplicantIncome,
         } : undefined,
-        documents: uploadedFiles,
       };
 
-      const result = await createApplication(applicationData).unwrap();
-      
+      formDataToSubmit.append('applicationData', JSON.stringify(applicationData));
+
+      // Add files to FormData - map form field names to API field names
+      const fileFieldMapping = {
+        'aadhar_card': 'aadharCard',
+        'pan_card': 'panCard',
+        'income_certificate': 'incomeProof',
+        'bank_statement': 'bankStatement',
+        'admission_letter': 'educationCertificate',
+        'fee_structure': 'feeReceipt'
+      };
+
+      Object.entries(fileFieldMapping).forEach(([formFieldName, apiFieldName]) => {
+        const files = uploadedFiles[formFieldName] || [];
+        files.forEach((file: File) => {
+          if (file) {
+            formDataToSubmit.append(apiFieldName, file);
+          }
+        });
+      });
+
+      const result = await createApplicationWithFiles(formDataToSubmit).unwrap();
+
       toast.success('Application submitted successfully!');
       router.push(`/user/applications/${result.applicationId}`);
-      
+
     } catch (error: any) {
+      console.error('Application submission error:', error);
       toast.error(error?.data?.error || 'Failed to submit application');
     }
   };
 
-  const handleFileUpload = (documentType: string, files: any[]) => {
+  const handleFileUpload = (documentType: string, files: File[]) => {
     setUploadedFiles(prev => ({
       ...prev,
       [documentType]: files
@@ -644,41 +669,95 @@ export default function NewLoanApplication() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <FileUpload
-                documentType="aadhar_card"
-                onFilesChange={(files) => handleFileUpload('aadhar_card', files)}
-                required
-              />
-              
-              <FileUpload
-                documentType="pan_card"
-                onFilesChange={(files) => handleFileUpload('pan_card', files)}
-                required
-              />
-              
-              <FileUpload
-                documentType="income_certificate"
-                onFilesChange={(files) => handleFileUpload('income_certificate', files)}
-                required
-              />
-              
-              <FileUpload
-                documentType="bank_statement"
-                onFilesChange={(files) => handleFileUpload('bank_statement', files)}
-                required
-              />
-              
-              <FileUpload
-                documentType="admission_letter"
-                onFilesChange={(files) => handleFileUpload('admission_letter', files)}
-                required
-              />
-              
-              <FileUpload
-                documentType="fee_structure"
-                onFilesChange={(files) => handleFileUpload('fee_structure', files)}
-                required
-              />
+              <div className="space-y-2">
+                <Label htmlFor="aadhar_card">Aadhar Card *</Label>
+                <Input
+                  id="aadhar_card"
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  onChange={(e) => {
+                    const files = e.target.files ? Array.from(e.target.files) : [];
+                    handleFileUpload('aadhar_card', files);
+                  }}
+                  className={errors.aadhar_card ? 'border-red-500' : ''}
+                />
+                {errors.aadhar_card && <p className="text-sm text-red-500">{errors.aadhar_card}</p>}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="pan_card">PAN Card *</Label>
+                <Input
+                  id="pan_card"
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  onChange={(e) => {
+                    const files = e.target.files ? Array.from(e.target.files) : [];
+                    handleFileUpload('pan_card', files);
+                  }}
+                  className={errors.pan_card ? 'border-red-500' : ''}
+                />
+                {errors.pan_card && <p className="text-sm text-red-500">{errors.pan_card}</p>}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="income_certificate">Income Certificate *</Label>
+                <Input
+                  id="income_certificate"
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  onChange={(e) => {
+                    const files = e.target.files ? Array.from(e.target.files) : [];
+                    handleFileUpload('income_certificate', files);
+                  }}
+                  className={errors.income_certificate ? 'border-red-500' : ''}
+                />
+                {errors.income_certificate && <p className="text-sm text-red-500">{errors.income_certificate}</p>}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="bank_statement">Bank Statement *</Label>
+                <Input
+                  id="bank_statement"
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  onChange={(e) => {
+                    const files = e.target.files ? Array.from(e.target.files) : [];
+                    handleFileUpload('bank_statement', files);
+                  }}
+                  className={errors.bank_statement ? 'border-red-500' : ''}
+                />
+                {errors.bank_statement && <p className="text-sm text-red-500">{errors.bank_statement}</p>}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="admission_letter">Admission Letter *</Label>
+                <Input
+                  id="admission_letter"
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  onChange={(e) => {
+                    const files = e.target.files ? Array.from(e.target.files) : [];
+                    handleFileUpload('admission_letter', files);
+                  }}
+                  className={errors.admission_letter ? 'border-red-500' : ''}
+                />
+                {errors.admission_letter && <p className="text-sm text-red-500">{errors.admission_letter}</p>}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="fee_structure">Fee Structure *</Label>
+                <Input
+                  id="fee_structure"
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  onChange={(e) => {
+                    const files = e.target.files ? Array.from(e.target.files) : [];
+                    handleFileUpload('fee_structure', files);
+                  }}
+                  className={errors.fee_structure ? 'border-red-500' : ''}
+                />
+                {errors.fee_structure && <p className="text-sm text-red-500">{errors.fee_structure}</p>}
+              </div>
             </div>
 
             {Object.keys(errors).some(key => key.includes('_')) && (

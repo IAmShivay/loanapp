@@ -189,11 +189,32 @@ export const apiSlice = createApi({
   baseQuery: fetchBaseQuery({
     baseUrl: '/api',
     prepareHeaders: (headers) => {
-      headers.set('Content-Type', 'application/json');
+      // Only set Content-Type to application/json if it's not already set
+      // This allows FormData requests to set their own Content-Type with boundary
+      if (!headers.has('content-type')) {
+        headers.set('Content-Type', 'application/json');
+      }
       return headers;
     },
   }),
-  tagTypes: ['Statistics', 'Applications', 'Notifications', 'Users', 'Files', 'Chat', 'Messages', 'SupportTicket'],
+  tagTypes: [
+    'Statistics',
+    'Applications',
+    'Application',
+    'Notifications',
+    'Notification',
+    'Users',
+    'User',
+    'Files',
+    'File',
+    'Chat',
+    'Messages',
+    'Message',
+    'SupportTickets',
+    'SupportTicket',
+    'Analytics',
+    'Settings'
+  ],
   endpoints: (builder) => ({
     // Statistics endpoints
     getStatistics: builder.query<{ statistics: Statistics }, string>({
@@ -219,12 +240,18 @@ export const apiSlice = createApi({
         });
         return `applications?${searchParams.toString()}`;
       },
-      providesTags: ['Applications'],
+      providesTags: (result) =>
+        result
+          ? [
+              ...result.applications.map(({ _id }) => ({ type: 'Application' as const, id: _id })),
+              { type: 'Applications', id: 'LIST' },
+            ]
+          : [{ type: 'Applications', id: 'LIST' }],
     }),
     
     getApplicationById: builder.query<{ application: Application }, string>({
       query: (id) => `applications/${id}`,
-      providesTags: ['Applications'],
+      providesTags: (result, error, id) => [{ type: 'Application', id }],
     }),
     
     createApplication: builder.mutation<{ applicationId: string }, Partial<Application>>({
@@ -233,7 +260,39 @@ export const apiSlice = createApi({
         method: 'POST',
         body: application,
       }),
-      invalidatesTags: ['Applications', 'Statistics'],
+      invalidatesTags: [
+        { type: 'Applications', id: 'LIST' },
+        'Statistics'
+      ],
+    }),
+
+    createApplicationWithFiles: builder.mutation<{ applicationId: string }, FormData>({
+      queryFn: async (formData, { signal }) => {
+        try {
+          // Use native fetch to ensure proper multipart/form-data handling
+          const response = await fetch('/api/applications/with-files', {
+            method: 'POST',
+            body: formData,
+            signal,
+            // Don't set Content-Type header - let browser set it with boundary
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+            return { error: { status: response.status, data: errorData } };
+          }
+
+          const data = await response.json();
+          return { data };
+        } catch (error) {
+          return { error: { status: 'FETCH_ERROR', error: String(error) } };
+        }
+      },
+      invalidatesTags: [
+        { type: 'Applications', id: 'LIST' },
+        { type: 'Files', id: 'LIST' },
+        'Statistics'
+      ],
     }),
 
     updateApplicationStatus: builder.mutation<{ application: Application }, { applicationId: string; status: string; comments?: string }>({
@@ -323,8 +382,20 @@ export const apiSlice = createApi({
         url: 'files/upload',
         method: 'POST',
         body: formData,
+        // Explicitly don't set Content-Type - let browser handle it for FormData
+        prepareHeaders: (headers: Headers) => {
+          // Remove any Content-Type header to let browser set it automatically
+          headers.delete('content-type');
+          return headers;
+        },
       }),
-      invalidatesTags: ['Files'],
+      invalidatesTags: (result, error, formData) => {
+        const applicationId = formData.get('applicationId') as string;
+        return [
+          { type: 'Files' as const, id: 'LIST' },
+          ...(applicationId ? [{ type: 'Application' as const, id: applicationId }] : []),
+        ];
+      },
     }),
 
     getFiles: builder.query<{ files: FileUpload[] }, {
@@ -409,13 +480,13 @@ export const apiSlice = createApi({
     // Email endpoints
     sendEmail: builder.mutation<{
       success: boolean;
-      results: any[];
+      results: unknown[];
       summary: { total: number; successful: number; failed: number; };
     }, {
       templateName: string;
-      templateData: any;
+      templateData: unknown;
       recipients: string | string[];
-      options?: any;
+      options?: unknown;
     }>({
       query: (emailData) => ({
         url: 'email/send',
@@ -431,12 +502,12 @@ export const apiSlice = createApi({
     }),
 
     // User Profile endpoints
-    getUserProfile: builder.query<{ profile: any }, string>({
+    getUserProfile: builder.query<{ profile: unknown }, string>({
       query: (userId) => `users/${userId}/profile`,
       providesTags: ['Users'],
     }),
 
-    updateUserProfile: builder.mutation<{ profile: any }, { userId: string; profileData: any }>({
+    updateUserProfile: builder.mutation<{ profile: unknown }, { userId: string; profileData: unknown }>({
       query: ({ userId, profileData }) => ({
         url: `users/${userId}/profile`,
         method: 'PUT',
@@ -446,12 +517,12 @@ export const apiSlice = createApi({
     }),
 
     // Application-specific endpoints
-    getApplication: builder.query<{ application: any }, string>({
+    getApplication: builder.query<{ application: unknown }, string>({
       query: (applicationId) => `applications/${applicationId}`,
       providesTags: ['Applications'],
     }),
 
-    getApplicationDocuments: builder.query<{ documents: any[] }, string>({
+    getApplicationDocuments: builder.query<{ documents: unknown[] }, string>({
       query: (applicationId) => `applications/${applicationId}/documents`,
       providesTags: ['Files'],
     }),
@@ -536,6 +607,66 @@ export const apiSlice = createApi({
       }),
       invalidatesTags: ['SupportTicket'],
     }),
+
+    // Admin analytics endpoints
+    getAnalytics: builder.query<{ analytics: unknown }, { timeRange?: string }>({
+      query: (params) => ({
+        url: 'admin/analytics',
+        params,
+      }),
+      providesTags: ['Analytics'],
+    }),
+
+    exportAnalytics: builder.mutation<{ exportUrl: string }, { filters?: unknown }>({
+      query: (data) => ({
+        url: 'admin/analytics',
+        method: 'POST',
+        body: { action: 'export', ...data },
+      }),
+    }),
+
+    refreshAnalytics: builder.mutation<{ message: string }, void>({
+      query: () => ({
+        url: 'admin/analytics',
+        method: 'POST',
+        body: { action: 'refresh' },
+      }),
+      invalidatesTags: ['Analytics'],
+    }),
+
+    // Admin settings endpoints
+    getSettings: builder.query<{ settings: unknown }, void>({
+      query: () => ({
+        url: 'admin/settings',
+      }),
+      providesTags: ['Settings'],
+    }),
+
+    updateSettings: builder.mutation<{ settings: unknown }, unknown>({
+      query: (settings) => ({
+        url: 'admin/settings',
+        method: 'PUT',
+        body: settings,
+      }),
+      invalidatesTags: ['Settings'],
+    }),
+
+    resetSettings: builder.mutation<{ settings: unknown }, void>({
+      query: () => ({
+        url: 'admin/settings',
+        method: 'POST',
+        body: { action: 'reset' },
+      }),
+      invalidatesTags: ['Settings'],
+    }),
+
+    backupSettings: builder.mutation<{ backupId: string }, void>({
+      query: () => ({
+        url: 'admin/settings',
+        method: 'POST',
+        body: { action: 'backup' },
+      }),
+    }),
   }),
 });
 
@@ -545,6 +676,7 @@ export const {
   useGetApplicationsQuery,
   useGetApplicationByIdQuery,
   useCreateApplicationMutation,
+  useCreateApplicationWithFilesMutation,
   useUpdateApplicationStatusMutation,
   useGetNotificationsQuery,
   useMarkNotificationAsReadMutation,
@@ -572,4 +704,11 @@ export const {
   useUpdateSupportTicketMutation,
   useAddSupportTicketMessageMutation,
   useDeleteSupportTicketMutation,
+  useGetAnalyticsQuery,
+  useExportAnalyticsMutation,
+  useRefreshAnalyticsMutation,
+  useGetSettingsQuery,
+  useUpdateSettingsMutation,
+  useResetSettingsMutation,
+  useBackupSettingsMutation,
 } = apiSlice;

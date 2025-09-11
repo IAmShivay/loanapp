@@ -43,7 +43,7 @@ export default function DSAApplicationsPage() {
     error: applicationsError,
     refetch: refetchApplications
   } = useGetApplicationsQuery({
-    status: statusFilter || undefined,
+    status: statusFilter && statusFilter !== 'all' ? statusFilter : undefined,
     search: searchTerm || undefined,
     limit: 50,
     page: 1
@@ -237,11 +237,11 @@ export default function DSAApplicationsPage() {
         {/* Applications List */}
         <div className="grid grid-cols-1 gap-4 lg:gap-6">
           {applications.map((app) => {
-            const daysLeft = getDaysLeft(app.deadline);
+            const daysLeft = getDaysLeft(app.createdAt);
             const isUrgent = daysLeft <= 1;
-            
+
             return (
-              <Card key={app.id} className={`bg-white border transition-all hover:shadow-md ${
+              <Card key={app._id} className={`bg-white border transition-all hover:shadow-md ${
                 isUrgent ? 'border-red-200 bg-red-50/30' : 'border-slate-200'
               }`}>
                 <CardContent className="p-4 sm:p-6">
@@ -250,9 +250,9 @@ export default function DSAApplicationsPage() {
                       <div className="flex items-start justify-between">
                         <div>
                           <div className="flex items-center gap-2">
-                            <h3 className="font-semibold text-slate-900">{app.id}</h3>
-                            <Badge className={getPriorityColor(app.priority)} >
-                              {app.priority}
+                            <h3 className="font-semibold text-slate-900">{safeString(app.applicationId)}</h3>
+                            <Badge className="bg-blue-100 text-blue-800">
+                              Education Loan
                             </Badge>
                             {isUrgent && (
                               <Badge className="bg-red-100 text-red-800" >
@@ -261,7 +261,7 @@ export default function DSAApplicationsPage() {
                             )}
                           </div>
                           <p className="text-sm text-slate-500">
-                            Submitted {new Date(app.submittedAt).toLocaleDateString()}
+                            Submitted {safeDate(app.createdAt)}
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
@@ -275,18 +275,22 @@ export default function DSAApplicationsPage() {
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                         <div>
                           <p className="text-sm font-medium text-slate-700">Applicant</p>
-                          <p className="text-sm text-slate-900">{app.applicantName}</p>
-                          <p className="text-xs text-slate-500">{app.applicantEmail}</p>
+                          <p className="text-sm text-slate-900">
+                            {safeString(app.personalInfo?.firstName)} {safeString(app.personalInfo?.lastName)}
+                          </p>
+                          <p className="text-xs text-slate-500">{safeString(app.personalInfo?.email)}</p>
                         </div>
                         <div>
                           <p className="text-sm font-medium text-slate-700">Institution</p>
-                          <p className="text-sm text-slate-900">{app.institution}</p>
-                          <p className="text-xs text-slate-500">{app.course}</p>
+                          <p className="text-sm text-slate-900">{safeString(app.educationInfo?.instituteName)}</p>
+                          <p className="text-xs text-slate-500">{safeString(app.educationInfo?.course)}</p>
                         </div>
                         <div>
                           <p className="text-sm font-medium text-slate-700">Loan Amount</p>
-                          <p className="text-sm font-semibold text-slate-900">₹{(app.loanAmount / 100000).toFixed(1)}L</p>
-                          <p className="text-xs text-slate-500">{app.duration}</p>
+                          <p className="text-sm font-semibold text-slate-900">
+                            {formatCurrency(safeNumber(app.loanInfo?.amount, 0))}
+                          </p>
+                          <p className="text-xs text-slate-500">{safeString(app.loanInfo?.tenure)} years</p>
                         </div>
                       </div>
 
@@ -295,13 +299,13 @@ export default function DSAApplicationsPage() {
                           <div className="text-sm">
                             <span className="text-slate-600">Documents: </span>
                             <span className="font-medium text-slate-900">
-                              {app.completedDocuments}/{app.totalDocuments}
+                              {app.documents?.length || 0}/6
                             </span>
                           </div>
                           <div className="text-sm">
-                            <span className="text-slate-600">Deadline: </span>
-                            <span className={`font-medium ${isUrgent ? 'text-red-600' : 'text-slate-900'}`}>
-                              {daysLeft > 0 ? `${daysLeft} days left` : 'Overdue'}
+                            <span className="text-slate-600">Status: </span>
+                            <span className={`font-medium ${app.status === 'approved' ? 'text-green-600' : 'text-slate-900'}`}>
+                              {safeString(app.status).replace('_', ' ')}
                             </span>
                           </div>
                         </div>
@@ -309,7 +313,7 @@ export default function DSAApplicationsPage() {
                     </div>
 
                     <div className="flex flex-col sm:flex-row gap-2">
-                      <Link href={`/dsa/applications/${app.id}`}>
+                      <Link href={`/dsa/applications/${app._id}`}>
                         <Button variant="outline"  className="w-full sm:w-auto">
                           <Eye className="h-4 w-4 mr-2" />
                           Review

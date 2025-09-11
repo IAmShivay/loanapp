@@ -61,8 +61,8 @@ export default function DSASupportPage() {
     error: ticketsError,
     refetch: refetchTickets
   } = useGetSupportTicketsQuery({
-    status: statusFilter || undefined,
-    category: categoryFilter || undefined,
+    status: statusFilter && statusFilter !== 'all' ? statusFilter : undefined,
+    category: categoryFilter && categoryFilter !== 'all' ? categoryFilter : undefined,
     limit: 20,
     page: 1
   });
@@ -227,26 +227,26 @@ export default function DSASupportPage() {
                 </div>
                 <div className="max-h-96 overflow-y-auto">
                   {supportTickets.map((ticket) => (
-                    <div key={ticket.id} className="p-4 border-b border-slate-100 last:border-b-0 hover:bg-slate-50 cursor-pointer">
+                    <div key={ticket._id} className="p-4 border-b border-slate-100 last:border-b-0 hover:bg-slate-50 cursor-pointer">
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex items-center gap-2">
                           {getStatusIcon(ticket.status)}
-                          <h4 className="font-medium text-slate-900">{ticket.title}</h4>
+                          <h4 className="font-medium text-slate-900">{safeString(ticket.subject)}</h4>
                         </div>
                         <Badge className={getPriorityColor(ticket.priority)} >
-                          {ticket.priority}
+                          {safeString(ticket.priority)}
                         </Badge>
                       </div>
-                      <p className="text-sm text-slate-600 mb-3 line-clamp-2">{ticket.description}</p>
+                      <p className="text-sm text-slate-600 mb-3 line-clamp-2">{safeString(ticket.description)}</p>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <Badge className={getStatusColor(ticket.status)} >
-                            {ticket.status.replace('_', ' ')}
+                            {safeString(ticket.status).replace('_', ' ')}
                           </Badge>
-                          <span className="text-xs text-slate-500">{ticket.category}</span>
+                          <span className="text-xs text-slate-500">{safeString(ticket.category)}</span>
                         </div>
                         <div className="text-xs text-slate-500">
-                          {new Date(ticket.createdAt).toLocaleDateString()}
+                          {safeDate(ticket.createdAt)}
                         </div>
                       </div>
                     </div>
